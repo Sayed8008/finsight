@@ -318,3 +318,45 @@ setting a flag reads fine and surprises everyone later.
 **Consequence:** the list endpoint hides deactivated categories unless asked
 (`include_inactive=true`), so the form pickers that call it cannot offer a
 retired category for a new transaction.
+
+---
+
+## ADR-021 — Filtering, sorting and pagination happen in SQL
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Transaction filters compose into one `WHERE` clause, with `ORDER BY` and
+`LIMIT`/`OFFSET`. The endpoint returns a page envelope — `items`, `total`,
+`page`, `page_size`, `pages` — and takes the sort column and direction as
+parameters. Filters are carried by one frozen `TransactionFilters` value
+object rather than a growing list of keyword arguments.
+
+**Why:** Fetching a user's rows and sifting them in Python gets slower in
+exact proportion to the history it is meant to search. It also makes `total`
+a lie, and sorting wrong: a client can only order the page it was handed, so
+"sort by amount" would sort 25 rows out of four thousand.
+
+`total` costs a second `COUNT(*)` over the same clauses. Both queries are
+built by one private method so they cannot drift apart — a count computed
+from different criteria than the page it describes gives a pager that
+disagrees with its own table.
+
+**Rejected:** cursor pagination. It is the better design for an infinite feed,
+but it cannot express "jump to page 7", which is what a table with a pager
+needs.
+
+**Two details that are easy to get wrong, and now have tests:**
+
+- **`ORDER BY` needs a unique tie-breaker.** Rows sharing a sort value — several
+  transactions on one date, the common case — have no defined order between
+  them, so MySQL may return them differently per query. A row then appears on
+  both page 1 and page 2 while another is never shown. Every sort ends in
+  `id DESC`.
+- **`LIKE` patterns need escaping.** `%` and `_` are wildcards, so an
+  unescaped search for `50%` matches every description, and `snacks_x` matches
+  `snacksXx`. SQLAlchemy's `contains(..., autoescape=True)` handles it.
+
+**Also worth knowing:** the category is loaded by the same join that makes
+sorting by category name possible (`contains_eager`), so a page of rows costs
+two queries regardless of its size. A test counts the statements, because an
+N+1 problem is invisible in a functional test — the rows are correct, there
+are just N more round trips than there should be.

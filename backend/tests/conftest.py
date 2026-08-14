@@ -20,7 +20,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, event, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -185,3 +185,53 @@ def account(make_account: Callable[..., Account]) -> Account:
 def other_account(make_account: Callable[..., Account]) -> Account:
     """A second user, whose data the first must never be able to reach."""
     return make_account(email="intruder@example.com", full_name="Someone Else")
+
+
+# ─── Counting queries ─────────────────────────────────────────────────────
+
+
+class QueryCounter:
+    """Records the SQL a block of code actually caused to run.
+
+    Exists so that "this endpoint does not issue a query per row" can be
+    asserted rather than hoped for. An N+1 problem is invisible in a passing
+    functional test — the results are correct, there are just a hundred more
+    round trips than there should be — so nothing but counting catches it.
+    """
+
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def reset(self) -> None:
+        """Forget everything so far, to exclude a test's own setup."""
+        self.statements.clear()
+
+    @property
+    def selects(self) -> list[str]:
+        return [
+            statement
+            for statement in self.statements
+            if statement.lstrip().upper().startswith("SELECT")
+        ]
+
+
+@pytest.fixture
+def query_counter(db_engine: Engine) -> Iterator[QueryCounter]:
+    """Count the statements sent to the database during a test."""
+    counter = QueryCounter()
+
+    def record(
+        conn: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: bool,
+    ) -> None:
+        counter.statements.append(statement)
+
+    event.listen(db_engine, "before_cursor_execute", record)
+    try:
+        yield counter
+    finally:
+        event.remove(db_engine, "before_cursor_execute", record)
