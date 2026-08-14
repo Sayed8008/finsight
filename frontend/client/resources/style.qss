@@ -237,6 +237,175 @@ QWidget {
     color: #16428f;
 }
 
+/* ─── Section headings ──────────────────────────────────────────────────── */
+
+#SectionTitle {
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: #0f1419;
+    background-color: transparent;
+}
+
+#SectionSubtitle,
+#PagerLabel {
+    font-size: 13px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+/* ─── Filter bar ────────────────────────────────────────────────────────── */
+
+#FilterBar {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-radius: 8px;
+}
+
+/* The container a LabelledWidget provides. Transparent by *id*, deliberately,
+ * rather than with a descendant rule such as `#FilterBar QWidget`: a QPushButton
+ * is a QWidget, so that rule would also match the buttons inside — and since
+ * `#FilterBar QWidget` is more specific than `#PrimaryButton`, it would win and
+ * paint the primary button in nothing at all (ADR-022). */
+#FormRow {
+    background-color: transparent;
+}
+
+/* Combo boxes and date editors. Kept visually identical to #FieldInput so a
+ * form row does not look assembled from parts. */
+#FieldSelect {
+    padding: 8px 10px;
+    border: 1px solid #cdd2d9;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #1c2024;
+    min-height: 18px;
+}
+
+#FieldSelect:focus,
+#FieldSelect:on {
+    border-color: #1a56c4;
+}
+
+#FieldSelect::drop-down {
+    border: none;
+    width: 18px;
+}
+
+#FieldSelect QAbstractItemView {
+    border: 1px solid #cdd2d9;
+    background-color: #ffffff;
+    selection-background-color: #eaf1fd;
+    selection-color: #1a56c4;
+    outline: none;
+}
+
+/* ─── Buttons beyond the primary one ────────────────────────────────────── */
+
+#SecondaryButton {
+    padding: 8px 14px;
+    border: 1px solid #cdd2d9;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #1c2024;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#SecondaryButton:hover {
+    background-color: #f0f2f5;
+    border-color: #b3bac3;
+}
+
+#SecondaryButton:disabled {
+    color: #b3bac3;
+    background-color: #f7f8fa;
+}
+
+#DangerButton {
+    padding: 8px 14px;
+    border: 1px solid #f0c2be;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #b4232c;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#DangerButton:hover {
+    background-color: #fdeceb;
+    border-color: #e39b95;
+}
+
+#DangerButton:disabled {
+    color: #d9a9a5;
+    border-color: #f0e0de;
+    background-color: #f7f8fa;
+}
+
+/* ─── Transactions table ────────────────────────────────────────────────── */
+
+#TransactionTable {
+    background-color: #ffffff;
+    alternate-background-color: #fbfcfd;
+    border: 1px solid #e3e6ea;
+    border-radius: 8px;
+    gridline-color: transparent;
+    selection-background-color: #eaf1fd;
+    selection-color: #1c2024;
+    outline: none;
+}
+
+#TransactionTable::item {
+    padding: 9px 12px;
+    border-bottom: 1px solid #f0f2f5;
+}
+
+#TransactionTable QHeaderView::section {
+    padding: 10px 12px;
+    border: none;
+    border-bottom: 1px solid #e3e6ea;
+    background-color: #ffffff;
+    color: #6b7480;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#TransactionTable QHeaderView::section:hover {
+    color: #1c2024;
+}
+
+/* ─── Empty states ──────────────────────────────────────────────────────── */
+
+#EmptyState {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-radius: 8px;
+}
+
+#EmptyTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#EmptyMessage {
+    font-size: 13px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+/* ─── Dialogs ───────────────────────────────────────────────────────────── */
+
+#TransactionDialog {
+    background-color: #ffffff;
+}
+
+#TransactionDialog QLabel {
+    background-color: transparent;
+}
+
 /* ─── Scrollbars ────────────────────────────────────────────────────────── */
 
 QScrollBar:vertical {

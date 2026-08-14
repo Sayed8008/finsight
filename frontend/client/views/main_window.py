@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         self.auth_view = AuthView(self.session)
         self.auth_view.authenticated.connect(self._show_application)
 
-        self.main_view = MainView()
+        self.main_view = MainView(api_client)
         self.main_view.sign_out_requested.connect(self._confirm_sign_out)
 
         self._pages = QStackedWidget()

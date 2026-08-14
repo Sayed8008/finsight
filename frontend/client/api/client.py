@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx2
 
-from client.api.dto import Token, User
+from client.api.dto import Category, Token, Transaction, TransactionPage, User
 from client.core.config import ClientConfig
 
 logger = logging.getLogger(__name__)
@@ -155,3 +155,113 @@ class ApiClient:
     def me(self) -> User:
         """The signed-in user. Raises ApiError with status 401 if the token is stale."""
         return User.from_json(self._request("GET", f"{self._v1}/auth/me"))
+
+    # ─── Categories ───────────────────────────────────────────────────────
+    def categories(self, *, include_inactive: bool = False) -> list[Category]:
+        """Every category belonging to the signed-in user.
+
+        Fetched once per view and kept, rather than per table row — the same
+        fifteen names would otherwise be requested once for each transaction on
+        screen.
+        """
+        payload = self._request(
+            "GET",
+            f"{self._v1}/categories",
+            params=_without_none({"include_inactive": include_inactive or None}),
+        )
+        return [Category.from_json(item) for item in payload]
+
+    def create_category(
+        self, name: str, category_type: str, *, color: str | None = None
+    ) -> Category:
+        payload = self._request(
+            "POST",
+            f"{self._v1}/categories",
+            json=_without_none({"name": name, "category_type": category_type, "color": color}),
+        )
+        return Category.from_json(payload)
+
+    def update_category(self, category_id: int, **changes: Any) -> Category:
+        """Rename, recolour, deactivate or restore a category.
+
+        Only the keys passed are sent, so this is a genuine PATCH: omitting
+        `color` leaves the colour alone rather than clearing it. There is no
+        delete — a category is retired by `is_active=False`.
+        """
+        payload = self._request("PATCH", f"{self._v1}/categories/{category_id}", json=changes)
+        return Category.from_json(payload)
+
+    # ─── Transactions ─────────────────────────────────────────────────────
+    def transactions(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 25,
+        sort_by: str = "date",
+        order: str = "desc",
+        date_from: str | None = None,
+        date_to: str | None = None,
+        transaction_type: str | None = None,
+        category_id: int | None = None,
+        payment_method: str | None = None,
+        amount_min: str | None = None,
+        amount_max: str | None = None,
+        search: str | None = None,
+    ) -> TransactionPage:
+        """One page of transactions.
+
+        Every filter is passed to the server, which does the filtering, sorting
+        and paging in SQL. Doing any of it here would only ever narrow the page
+        already received — 25 rows out of however many there are.
+
+        Amount bounds are passed as strings for the same reason they arrive as
+        strings: a float in a query parameter is a float.
+        """
+        params = _without_none(
+            {
+                "page": page,
+                "page_size": page_size,
+                "sort_by": sort_by,
+                "order": order,
+                "date_from": date_from,
+                "date_to": date_to,
+                "transaction_type": transaction_type,
+                "category_id": category_id,
+                "payment_method": payment_method,
+                "amount_min": amount_min,
+                "amount_max": amount_max,
+                "search": search,
+            }
+        )
+        return TransactionPage.from_json(
+            self._request("GET", f"{self._v1}/transactions", params=params)
+        )
+
+    def create_transaction(self, **fields: Any) -> Transaction:
+        payload = self._request("POST", f"{self._v1}/transactions", json=fields)
+        return Transaction.from_json(payload)
+
+    def update_transaction(self, transaction_id: int, **changes: Any) -> Transaction:
+        payload = self._request("PATCH", f"{self._v1}/transactions/{transaction_id}", json=changes)
+        return Transaction.from_json(payload)
+
+    def delete_transaction(self, transaction_id: int) -> None:
+        self._request("DELETE", f"{self._v1}/transactions/{transaction_id}")
+
+    def payment_methods(self) -> list[str]:
+        """The payment methods this user has actually recorded.
+
+        Used to fill the filter list with real values, rather than asking the
+        user to remember how they spelled "bKash" last time.
+        """
+        return list(self._request("GET", f"{self._v1}/transactions/payment-methods"))
+
+
+def _without_none(values: dict[str, Any]) -> dict[str, Any]:
+    """Drop keys whose value is None.
+
+    An unset filter must be absent from the query string, not sent as an empty
+    value — `?search=` is a search for the empty string, which is not the same
+    request as not searching at all.
+    """
+    return {key: value for key, value in values.items() if value is not None}

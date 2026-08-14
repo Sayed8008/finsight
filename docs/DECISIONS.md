@@ -360,3 +360,33 @@ sorting by category name possible (`contains_eager`), so a page of rows costs
 two queries regardless of its size. A test counts the statements, because an
 N+1 problem is invisible in a functional test — the rows are correct, there
 are just N more round trips than there should be.
+
+---
+
+## ADR-022 — Qt stylesheet specificity: never style widgets by descendant type
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Containers that need a transparent background are given an object name and
+styled by id (`#FormRow`). Rules of the form `#SomeParent QWidget { ... }` are
+not used.
+
+**Why:** Qt stylesheets follow CSS specificity. `#TransactionDialog QWidget`
+(one id, one type) is *more* specific than `#PrimaryButton` (one id), so it
+wins. Since a `QPushButton` is a `QWidget`, a rule intended to make label
+backgrounds transparent inside a dialog also set the primary button's
+background to transparent — and the button was then drawn in white text on a
+white dialog. It was laid out, sized, enabled, visible and clickable
+throughout; only invisible.
+
+**Found by:** rendering the dialog and looking at it, which is the practice
+ADR-012 exists for. Every non-visual check passed — `isVisible()` was true and
+`geometry()` was correct.
+
+**Tested by:** grabbing the button and sampling a background pixel. A
+regression test that asserts geometry or visibility would not have caught this
+and would not catch it again; only the pixels distinguish "painted" from
+"painted in nothing".
+
+**Corollary:** the same trap applies to `alternate-background-color`, borders
+and padding. If a rule needs to reach a group of widgets, the group gets a
+shared object name.

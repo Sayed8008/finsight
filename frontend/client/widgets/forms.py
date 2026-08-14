@@ -49,6 +49,35 @@ class FormField(QWidget):
         self.input.setEnabled(enabled)
 
 
+class LabelledWidget(QWidget):
+    """Any input, with a caption above it.
+
+    `FormField` builds its own `QLineEdit`; this wraps something already built —
+    a combo box, a date editor — so that a form mixing input types still has one
+    consistent label style and spacing rather than each row inventing its own.
+    """
+
+    def __init__(self, label: str, widget: QWidget, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        # Named so the stylesheet can make this container transparent by id.
+        # The tempting alternative — `#Dialog QWidget { background: transparent }`
+        # — also matches every button inside it, and being more specific than
+        # `#PrimaryButton` it wins, leaving the primary button painted in
+        # nothing. See ADR-022.
+        self.setObjectName("FormRow")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        caption = QLabel(label)
+        caption.setObjectName("FieldLabel")
+        layout.addWidget(caption)
+
+        self.widget = widget
+        layout.addWidget(widget)
+
+
 class MessageBanner(QLabel):
     """An inline message above a form.
 
