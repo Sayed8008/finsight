@@ -1,0 +1,8 @@
+# FinSight — development and test dependencies
+#
+#     pip install -r requirements.txt -r requirements-dev.txt
+
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-qt==4.5.0                  # drives PySide6 widgets in tests
+ruff==0.16.3                      # linter + formatter, replaces flake8/black/isort

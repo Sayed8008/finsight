@@ -1,0 +1,31 @@
+# FinSight — runtime dependencies
+#
+# Versions are pinned exactly so that this project builds identically on
+# Linux and Windows, today and in six months. Upgrade deliberately, not by
+# accident.
+#
+#     pip install -r requirements.txt
+
+# ─── Backend: API ─────────────────────────────────────────────────────────
+fastapi==0.141.1
+uvicorn==0.52.3
+python-multipart==0.0.32          # required by FastAPI for form/file uploads
+
+# ─── Backend: configuration & validation ──────────────────────────────────
+pydantic==2.13.4
+pydantic-settings==2.15.0
+
+# ─── Backend: database ────────────────────────────────────────────────────
+SQLAlchemy==2.0.52
+alembic==1.19.1
+PyMySQL==1.2.0
+cryptography==50.0.0              # REQUIRED: MySQL 8.4 uses caching_sha2_password
+
+# ─── Backend: security ────────────────────────────────────────────────────
+argon2-cffi==25.1.0               # password hashing (OWASP first choice)
+PyJWT==2.13.0                     # access tokens
+
+# ─── Desktop client ───────────────────────────────────────────────────────
+PySide6==6.11.1                   # includes QtCharts, used from Phase 7
+httpx2==2.10.0                    # HTTP client for the desktop app; also backs
+                                  # Starlette's TestClient (httpx v1 is deprecated there)

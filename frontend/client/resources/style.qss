@@ -1,0 +1,123 @@
+/* FinSight — application stylesheet.
+ *
+ * A restrained, neutral palette. Colour is used to carry meaning (status,
+ * selection) rather than for decoration, so that later on green/amber/red can
+ * mean "healthy / warning / exceeded" without competing with the interface.
+ */
+
+/* ─── Base ──────────────────────────────────────────────────────────────── */
+
+QWidget {
+    background-color: #f7f8fa;
+    color: #1c2024;
+    font-family: "Inter", "Segoe UI", "Ubuntu", "DejaVu Sans", sans-serif;
+    font-size: 14px;
+}
+
+#ContentArea {
+    background-color: #f7f8fa;
+}
+
+/* ─── Sidebar ───────────────────────────────────────────────────────────── */
+
+#Sidebar {
+    background-color: #ffffff;
+    border-right: 1px solid #e3e6ea;
+}
+
+#Wordmark {
+    padding: 22px 20px 18px 20px;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: #0f1419;
+    background-color: transparent;
+}
+
+#NavList {
+    background-color: transparent;
+    outline: none;
+    padding: 4px 10px;
+}
+
+#NavList::item {
+    padding: 10px 12px;
+    margin: 1px 0;
+    border-radius: 6px;
+    color: #4a5259;
+}
+
+#NavList::item:hover {
+    background-color: #f0f2f5;
+    color: #1c2024;
+}
+
+#NavList::item:selected {
+    background-color: #eaf1fd;
+    color: #1a56c4;
+    font-weight: 600;
+}
+
+/* ─── Backend status indicator ──────────────────────────────────────────── */
+
+#SidebarStatus {
+    padding: 12px 20px;
+    font-size: 12px;
+    border-top: 1px solid #e3e6ea;
+    background-color: transparent;
+    color: #6b7480;
+}
+
+#SidebarStatus[online="true"] {
+    color: #1a7f4b;
+}
+
+#SidebarStatus[online="false"] {
+    color: #b4232c;
+}
+
+/* ─── Placeholder / empty states ────────────────────────────────────────── */
+
+#PlaceholderView {
+    background-color: #f7f8fa;
+}
+
+#PlaceholderTitle {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+/* Wrap width is set in placeholder.py — Qt stylesheets have no max-width. */
+#PlaceholderMessage {
+    font-size: 14px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+/* ─── Scrollbars ────────────────────────────────────────────────────────── */
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #cdd2d9;
+    border-radius: 5px;
+    min-height: 28px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #b3bac3;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    height: 0;
+    background: none;
+}

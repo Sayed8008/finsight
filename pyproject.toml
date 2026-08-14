@@ -1,0 +1,42 @@
+[project]
+name = "finsight"
+version = "0.1.0"
+description = "Personal finance and subscription intelligence desktop application"
+requires-python = ">=3.11"
+
+# ─── Tests ────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+# `pythonpath` lets tests import `app.*` (backend) and `client.*` (frontend)
+# without installing either as a package.
+pythonpath = ["backend", "frontend"]
+testpaths = ["backend/tests", "frontend/tests"]
+addopts = "-q --strict-markers"
+
+markers = [
+    "gui: tests that construct Qt widgets (require a display or offscreen mode)",
+]
+
+# ─── Linting / formatting ─────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "backend/alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import sorting
+    "B",    # bugbear: likely bugs
+    "UP",   # pyupgrade: modern syntax
+    "C4",   # comprehension simplifications
+]
+ignore = [
+    "B008",  # function call in argument default — this is the FastAPI Depends() idiom
+]
+
+[tool.ruff.lint.isort]
+# Without this, ruff treats our own packages as third-party and groups their
+# imports alongside fastapi/pydantic.
+known-first-party = ["app", "client"]

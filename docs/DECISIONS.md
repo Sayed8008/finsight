@@ -135,3 +135,52 @@ insights.
 
 **Why:** Avoids a parallel subsystem duplicating rule logic. Desktop
 notifications can later be added as a second renderer of the same data.
+
+---
+
+## ADR-009 — PyJWT for access tokens
+**Date:** 2026-08-15 · **Status:** Accepted
+
+**Why:** `python-jose`, the other common choice, is effectively unmaintained.
+PyJWT is actively maintained and is what FastAPI's own documentation uses.
+
+**Rejected:** `python-jose[cryptography]`.
+
+---
+
+## ADR-010 — httpx2 as the single HTTP client
+**Date:** 2026-08-15 · **Status:** Accepted
+
+The desktop client uses `httpx2`, which also backs Starlette's `TestClient`.
+
+**Why:** Starlette 1.6 deprecated httpx v1 inside its `TestClient` and emits a
+warning telling you to install `httpx2`. Using httpx2 for the desktop client as
+well means one HTTP library in the project rather than two.
+
+**Verified:** `httpx2.Client`, `ConnectError`, `TimeoutException` and
+`HTTPStatusError` all exist with the same names, so no adaptation was needed.
+
+---
+
+## ADR-011 — The desktop package is `client`, not `app`
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Backend code lives in `backend/app/`; desktop code lives in `frontend/client/`.
+
+**Why:** The original plan had both named `app`. Since pytest puts both
+`backend/` and `frontend/` on the import path, two packages named `app` would
+shadow each other and produce import errors that are tedious to diagnose.
+Distinct names cost nothing.
+
+---
+
+## ADR-012 — Layout bugs are found by rendering, not by reading
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Qt views are screenshotted offscreen (`QT_QPA_PLATFORM=offscreen` plus
+`QWidget.grab()`) and inspected during development.
+
+**Why:** The first render of the main window revealed two defects invisible in
+the source: `QListWidget` in a stretched layout silently clipped its last item
+("Settings"), and Qt stylesheets ignore `max-width`, so the placeholder text
+wrapped to the width of its title. Both now have regression tests.

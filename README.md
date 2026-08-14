@@ -2,7 +2,7 @@
 
 > Personal finance and subscription intelligence — a desktop application.
 
-**Status:** in development (Phase 0 — project foundation)
+**Status:** in development (Phase 1 — application skeleton; both halves run)
 
 FinSight helps a single user understand where their money goes: spending by
 category, budget health, savings trends, and — its distinguishing feature —
@@ -70,20 +70,90 @@ Planned for the first release:
 
 ## Getting started
 
-> Setup instructions are added in Phase 1, once there is an application to run.
+Requires Python 3.11 or newer and MySQL 8.
+
+**1. Install dependencies**
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+```
+
+On Windows, use `.venv\Scripts\pip` instead.
+
+**2. Configure**
+
+```bash
+cp .env.example .env
+python -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into SECRET_KEY
+```
+
+**3. Create the database** (not needed until Phase 2)
+
+Edit `scripts/setup_database.sql` to set a password, then:
+
+```bash
+sudo mysql < scripts/setup_database.sql
+```
+
+Put the same password into `DATABASE_URL` and `TEST_DATABASE_URL` in `.env`.
+
+**4. Run**
+
+```bash
+./scripts/dev.sh              # Linux/macOS — starts backend and client
+.\scripts\dev.ps1             # Windows PowerShell
+```
+
+Or run either half on its own with `./scripts/dev.sh backend` / `client`.
+
+- API: <http://127.0.0.1:8000>
+- Interactive API documentation: <http://127.0.0.1:8000/docs>
 
 ## Project layout
 
 ```
-backend/    FastAPI application, services, repositories, models, migrations
-frontend/   PySide6 desktop client
-docs/       Architecture and decision records
-scripts/    Development and setup helpers
+backend/
+  app/
+    api/v1/        route handlers — parse, delegate, return
+    core/          configuration, logging, security
+    db/            engine and session management
+    models/        SQLAlchemy ORM models
+    schemas/       Pydantic request/response models
+    services/      business logic
+    repositories/  database queries
+    main.py        application factory
+  tests/           unit/ and api/
+frontend/
+  client/
+    api/           the only place the client makes HTTP calls
+    core/          client configuration and session state
+    views/         one view per section
+    widgets/       reusable interface components
+    resources/     stylesheet
+    main.py        entry point
+  tests/
+docs/              architecture and decision records
+scripts/           database setup and development launchers
 ```
 
 ## Testing
 
-> Added in Phase 1.
+```bash
+.venv/bin/python -m pytest              # everything
+.venv/bin/python -m pytest backend      # backend only
+.venv/bin/python -m pytest -m gui       # desktop client tests only
+```
+
+GUI tests use pytest-qt. On a machine with no display they automatically fall
+back to Qt's offscreen renderer.
+
+Linting and formatting use ruff:
+
+```bash
+.venv/bin/ruff check .
+.venv/bin/ruff format .
+```
 
 ## License
 
