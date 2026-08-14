@@ -26,6 +26,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # developer forgot to generate a key.
 PLACEHOLDER_SECRET = "CHANGE_ME_GENERATE_A_RANDOM_VALUE"
 
+# HS256 signs with HMAC-SHA256; RFC 7518 §3.2 requires a key of at least the
+# hash size. Enforced outside debug mode.
+MIN_SECRET_KEY_BYTES = 32
+
 
 class Settings(BaseSettings):
     """Typed application settings, loaded once at startup."""
@@ -95,12 +99,27 @@ class Settings(BaseSettings):
         order — a field validator on `secret_key` would run before `debug`
         had been populated.
         """
-        if not self.debug and self.secret_key == PLACEHOLDER_SECRET:
+        if self.debug:
+            return self
+
+        if self.secret_key == PLACEHOLDER_SECRET:
             raise ValueError(
                 "SECRET_KEY is still the placeholder from .env.example. "
                 'Generate one with: python -c "import secrets; '
                 'print(secrets.token_urlsafe(48))"'
             )
+
+        # RFC 7518 §3.2: an HMAC key should be at least as long as the hash
+        # output — 32 bytes for SHA-256. A shorter key weakens the signature
+        # that every access token depends on.
+        if len(self.secret_key.encode()) < MIN_SECRET_KEY_BYTES:
+            raise ValueError(
+                f"SECRET_KEY must be at least {MIN_SECRET_KEY_BYTES} bytes "
+                f"(got {len(self.secret_key.encode())}). "
+                'Generate one with: python -c "import secrets; '
+                'print(secrets.token_urlsafe(48))"'
+            )
+
         return self
 
     @field_validator("log_level")

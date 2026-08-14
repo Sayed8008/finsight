@@ -96,6 +96,147 @@ QWidget {
     background-color: transparent;
 }
 
+/* ─── Account panel ─────────────────────────────────────────────────────── */
+
+#AccountPanel {
+    border-top: 1px solid #e3e6ea;
+    background-color: transparent;
+}
+
+#AccountName {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#AccountEmail {
+    font-size: 12px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+/* ─── Authentication screen ─────────────────────────────────────────────── */
+
+#AuthView {
+    background-color: #f7f8fa;
+}
+
+#AuthCard {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-radius: 10px;
+}
+
+#AuthTitle {
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: #0f1419;
+    background-color: transparent;
+}
+
+#AuthSubtitle {
+    font-size: 13px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+#AuthSwitchRow {
+    background-color: transparent;
+}
+
+#AuthSwitchPrompt {
+    font-size: 13px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+/* ─── Form controls ─────────────────────────────────────────────────────── */
+
+#FieldLabel {
+    font-size: 13px;
+    font-weight: 500;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+#FieldInput {
+    padding: 9px 11px;
+    border: 1px solid #cdd2d9;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #1c2024;
+    selection-background-color: #1a56c4;
+    selection-color: #ffffff;
+}
+
+#FieldInput:focus {
+    border-color: #1a56c4;
+}
+
+#FieldInput:disabled {
+    background-color: #f0f2f5;
+    color: #8b939c;
+}
+
+#PrimaryButton {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 6px;
+    background-color: #1a56c4;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#PrimaryButton:hover {
+    background-color: #164aa8;
+}
+
+#PrimaryButton:pressed {
+    background-color: #133e8c;
+}
+
+#PrimaryButton:disabled {
+    background-color: #a9bee6;
+    color: #eef2fb;
+}
+
+#LinkButton {
+    border: none;
+    background: transparent;
+    color: #1a56c4;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0;
+    text-align: left;
+}
+
+#LinkButton:hover {
+    color: #133e8c;
+}
+
+/* ─── Inline messages ───────────────────────────────────────────────────── */
+
+#MessageBanner {
+    padding: 9px 11px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+#MessageBanner[level="error"] {
+    background-color: #fdeceb;
+    border: 1px solid #f3c4c0;
+    color: #9c1f19;
+}
+
+#MessageBanner[level="info"] {
+    background-color: #eaf1fd;
+    border: 1px solid #c3d6f6;
+    color: #16428f;
+}
+
 /* ─── Scrollbars ────────────────────────────────────────────────────────── */
 
 QScrollBar:vertical {

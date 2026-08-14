@@ -230,3 +230,64 @@ aggregate query is fast at this data size and cannot be wrong.
 **Revisit if:** aggregate queries become measurably slow — measure first.
 
 ---
+
+---
+
+## ADR-016 — Access tokens are held in memory only
+**Date:** 2026-08-15 · **Status:** Accepted
+
+The desktop client keeps the access token in memory. Closing the application
+means signing in again. Nothing is written to disk.
+
+**Why:** A token stored in a plain file is readable by anything running as the
+user. Doing it properly means the OS keyring (Windows Credential Manager,
+Linux Secret Service) plus a fallback for headless sessions — real work for a
+convenience feature.
+
+**Deferred, not rejected:** a "stay signed in" option would store a *refresh*
+token in the keyring, not the access token.
+
+---
+
+## ADR-017 — Logout is client-side; tokens are not revocable
+**Date:** 2026-08-15 · **Status:** Accepted
+
+`POST /auth/logout` exists, requires authentication and logs the event, but
+cannot invalidate an already-issued token.
+
+**Why:** JWTs are stateless by design — the server holds no session to end.
+Genuine revocation needs a denylist of issued tokens checked on every request,
+which reintroduces the per-request lookup that stateless tokens exist to
+avoid. Short token lifetimes (60 minutes) are the mitigation instead.
+
+**Honest limitation, worth stating in the report:** a stolen token remains
+valid until it expires.
+
+---
+
+## ADR-018 — Login failures are deliberately indistinguishable
+**Date:** 2026-08-15 · **Status:** Accepted
+
+An unknown email and a wrong password return the same status, the same
+message, and take comparable time. When no account exists, the service still
+performs a hash verification against a dummy hash before failing.
+
+**Why:** Differing responses turn a login form into a way of testing which
+email addresses hold accounts. Matching the *message* is easy; matching the
+*timing* is the part usually missed, because Argon2 verification takes long
+enough to be measurable over a network.
+
+**Tested:** `test_unknown_email_and_wrong_password_give_identical_responses`.
+
+---
+
+## ADR-019 — Client-side validation is for feedback, never enforcement
+**Date:** 2026-08-15 · **Status:** Accepted
+
+The desktop client checks for empty fields and short passwords before calling
+the API. Every one of those rules is also enforced server-side.
+
+**Why:** The client check exists so the user hears about a mistake instantly
+instead of after a round trip. It is not a security measure — anyone can call
+the API directly, so the server is the only authority. Validating in one place
+only would mean either a sluggish interface or an unprotected API.

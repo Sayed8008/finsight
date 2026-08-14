@@ -1,94 +1,89 @@
-"""Application main window.
+"""Application shell.
 
-Owns the window chrome and navigation. Each section's content is a separate
-view; this class only decides which one is visible. No business logic and no
-HTTP calls belong here — it asks `ApiClient` and displays the result.
+Owns the window and decides which of two things is on screen: the
+authentication view, or the signed-in application. Keeping that decision in
+one place means no other widget has to ask whether someone is logged in.
 """
 
 from __future__ import annotations
 
 import logging
 
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QMainWindow,
-    QStackedWidget,
-    QWidget,
-)
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QStackedWidget, QWidget
 
 from client.api.client import ApiClient, ApiError
-from client.views.placeholder import PlaceholderView
-from client.widgets.sidebar import NAV_ITEMS, Sidebar
+from client.core.session import Session
+from client.views.auth_view import AuthView
+from client.views.main_view import MainView
 
 logger = logging.getLogger(__name__)
 
-# What each section will contain, shown until the real view is built.
-SECTION_DESCRIPTIONS: dict[str, tuple[str, str]] = {
-    "dashboard": (
-        "Dashboard",
-        "Balance, monthly summary, charts and insights will appear here.",
-    ),
-    "transactions": (
-        "Transactions",
-        "Your income and expenses, with filtering, search and CSV import.",
-    ),
-    "budgets": (
-        "Budgets",
-        "Monthly budgets per category, with spend tracking and alerts.",
-    ),
-    "subscriptions": (
-        "Subscriptions",
-        "Recurring payments, renewal dates and total monthly commitment.",
-    ),
-    "analytics": (
-        "Analytics",
-        "Spending trends and category comparisons over a chosen period.",
-    ),
-    "settings": (
-        "Settings",
-        "Account details, categories and application preferences.",
-    ),
-}
+AUTH_PAGE = 0
+APP_PAGE = 1
 
 
 class MainWindow(QMainWindow):
     """The main application window."""
 
-    def __init__(self, api_client: ApiClient, parent=None) -> None:
+    def __init__(self, api_client: ApiClient, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._api = api_client
+        self.session = Session(api_client, parent=self)
 
         self.setWindowTitle("FinSight")
         self.resize(1180, 760)
         self.setMinimumSize(940, 600)
 
-        container = QWidget()
-        container.setObjectName("Root")
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        self.auth_view = AuthView(self.session)
+        self.auth_view.authenticated.connect(self._show_application)
 
-        self._sidebar = Sidebar()
-        self._sidebar.navigated.connect(self._show_section)
-        layout.addWidget(self._sidebar)
+        self.main_view = MainView()
+        self.main_view.sign_out_requested.connect(self._confirm_sign_out)
 
         self._pages = QStackedWidget()
-        self._pages.setObjectName("ContentArea")
-        self._page_index: dict[str, int] = {}
-        for nav in NAV_ITEMS:
-            title, message = SECTION_DESCRIPTIONS[nav.key]
-            index = self._pages.addWidget(PlaceholderView(title, message))
-            self._page_index[nav.key] = index
-        layout.addWidget(self._pages, stretch=1)
+        self._pages.addWidget(self.auth_view)
+        self._pages.addWidget(self.main_view)
+        self.setCentralWidget(self._pages)
 
-        self.setCentralWidget(container)
+        self.session.logged_in.connect(self.main_view.show_user)
+        self.session.logged_out.connect(self._show_authentication)
 
+        self._show_authentication()
         self.check_backend()
 
-    def _show_section(self, key: str) -> None:
-        index = self._page_index.get(key)
-        if index is not None:
-            self._pages.setCurrentIndex(index)
+    # ─── Screen switching ─────────────────────────────────────────────────
+
+    def _show_authentication(self) -> None:
+        self._pages.setCurrentIndex(AUTH_PAGE)
+        self.auth_view.reset()
+
+    def _show_application(self) -> None:
+        self._pages.setCurrentIndex(APP_PAGE)
+        self.check_backend()
+
+    def current_page(self) -> int:
+        return self._pages.currentIndex()
+
+    # ─── Sign out ─────────────────────────────────────────────────────────
+
+    def _confirm_sign_out(self) -> None:
+        """Ask before signing out.
+
+        Signing out is not destructive, but it is disruptive and easy to click
+        by accident, so it gets a confirmation like any other action the user
+        cannot undo with one click.
+        """
+        answer = QMessageBox.question(
+            self,
+            "Sign out",
+            "Sign out of FinSight?",
+            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer is QMessageBox.StandardButton.Yes:
+            self.session.log_out()
+
+    # ─── Backend status ───────────────────────────────────────────────────
 
     def check_backend(self) -> bool:
         """Ask the API whether it is running and reflect that in the sidebar.
@@ -101,8 +96,8 @@ class MainWindow(QMainWindow):
             self._api.health()
         except ApiError as exc:
             logger.warning("Backend health check failed: %s", exc.message)
-            self._sidebar.set_backend_status(online=False)
+            self.main_view.sidebar.set_backend_status(online=False)
             return False
 
-        self._sidebar.set_backend_status(online=True)
+        self.main_view.sidebar.set_backend_status(online=True)
         return True

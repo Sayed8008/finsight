@@ -13,7 +13,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
+from app.core.error_handlers import register_error_handlers
 from app.core.logging import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -66,6 +68,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    register_error_handlers(app)
+    app.include_router(api_router, prefix=settings.api_v1_prefix)
 
     @app.get("/health", tags=["system"], summary="Service health check")
     def health() -> dict[str, str]:

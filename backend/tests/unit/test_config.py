@@ -38,3 +38,15 @@ def test_placeholder_secret_is_rejected_outside_debug() -> None:
     """A published signing key would let anyone forge a token for any user."""
     with pytest.raises(ValidationError, match="placeholder"):
         Settings(debug=False, secret_key=PLACEHOLDER_SECRET)
+
+
+def test_short_secret_key_is_rejected_outside_debug() -> None:
+    """RFC 7518 requires an HMAC-SHA256 key of at least 32 bytes."""
+    with pytest.raises(ValidationError, match="at least 32 bytes"):
+        Settings(debug=False, secret_key="too-short")
+
+
+def test_long_secret_key_is_accepted_outside_debug() -> None:
+    settings = Settings(debug=False, secret_key="x" * 32)
+
+    assert settings.secret_key == "x" * 32

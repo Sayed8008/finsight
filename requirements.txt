@@ -14,6 +14,7 @@ python-multipart==0.0.32          # required by FastAPI for form/file uploads
 # ─── Backend: configuration & validation ──────────────────────────────────
 pydantic==2.13.4
 pydantic-settings==2.15.0
+email-validator==2.3.0            # backs pydantic's EmailStr type
 
 # ─── Backend: database ────────────────────────────────────────────────────
 SQLAlchemy==2.0.52

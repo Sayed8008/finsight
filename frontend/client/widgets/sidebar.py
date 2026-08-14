@@ -15,8 +15,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QPushButton,
     QSizePolicy,
     QVBoxLayout,
+    QWidget,
 )
 
 
@@ -45,6 +47,9 @@ class Sidebar(QFrame):
     """
 
     navigated = Signal(str)
+    #: Emitted when the user asks to sign out. The sidebar does not act on it
+    #: itself — ending a session is the shell's responsibility, not a widget's.
+    sign_out_requested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -81,9 +86,40 @@ class Sidebar(QFrame):
 
         layout.addStretch(1)
 
+        layout.addWidget(self._build_account_panel())
+
         self._status = QLabel("Not connected")
         self._status.setObjectName("SidebarStatus")
         layout.addWidget(self._status)
+
+    def _build_account_panel(self) -> QWidget:
+        """Who is signed in, and the way out."""
+        panel = QWidget()
+        panel.setObjectName("AccountPanel")
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(20, 14, 20, 12)
+        panel_layout.setSpacing(2)
+
+        self._account_name = QLabel("")
+        self._account_name.setObjectName("AccountName")
+        panel_layout.addWidget(self._account_name)
+
+        self._account_email = QLabel("")
+        self._account_email.setObjectName("AccountEmail")
+        panel_layout.addWidget(self._account_email)
+
+        self._sign_out_button = QPushButton("Sign out")
+        self._sign_out_button.setObjectName("LinkButton")
+        self._sign_out_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sign_out_button.clicked.connect(self.sign_out_requested.emit)
+        panel_layout.addWidget(self._sign_out_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        return panel
+
+    def set_user(self, full_name: str, email: str) -> None:
+        """Show the signed-in account in the sidebar footer."""
+        self._account_name.setText(full_name)
+        self._account_email.setText(email)
 
     def _natural_list_height(self) -> int:
         """Height needed to display every navigation item without scrolling."""

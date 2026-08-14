@@ -16,9 +16,13 @@ from typing import Any
 
 import httpx2
 
+from client.api.dto import Token, User
 from client.core.config import ClientConfig
 
 logger = logging.getLogger(__name__)
+
+# Path prefix for versioned resources. `/health` sits outside it.
+API_V1 = "/api/v1"
 
 
 class ApiError(Exception):
@@ -52,6 +56,26 @@ class ApiClient:
             base_url=self._config.api_base_url,
             timeout=self._config.request_timeout_seconds,
         )
+        self._token: str | None = None
+        self._v1 = API_V1
+
+    # ─── Authentication state ─────────────────────────────────────────────
+    def set_token(self, token: str | None) -> None:
+        """Attach (or clear) the access token sent with each request.
+
+        Held in memory only. Writing it to disk would mean protecting it
+        there, and re-entering a password on each launch is an acceptable
+        trade for a first version. A "stay signed in" option would store a
+        refresh token in the OS keyring rather than a plain file.
+        """
+        self._token = token
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._token is not None
+
+    def _auth_headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._token}"} if self._token else {}
 
     # ─── Lifecycle ────────────────────────────────────────────────────────
     def close(self) -> None:
@@ -65,8 +89,9 @@ class ApiClient:
 
     # ─── Requests ─────────────────────────────────────────────────────────
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        headers = {**self._auth_headers(), **kwargs.pop("headers", {})}
         try:
-            response = self._http.request(method, path, **kwargs)
+            response = self._http.request(method, path, headers=headers, **kwargs)
         except httpx2.ConnectError as exc:
             logger.warning("Cannot reach API at %s: %s", self._config.api_base_url, exc)
             raise ApiUnavailableError("Cannot reach the FinSight backend. Is it running?") from exc
@@ -101,7 +126,32 @@ class ApiClient:
             return detail
         return f"The server returned an error ({response.status_code})."
 
-    # ─── Endpoints ────────────────────────────────────────────────────────
+    # ─── System ───────────────────────────────────────────────────────────
     def health(self) -> dict[str, str]:
         """Check that the backend is running. Raises ApiUnavailableError if not."""
         return self._request("GET", "/health")
+
+    # ─── Authentication ───────────────────────────────────────────────────
+    def register(self, email: str, password: str, full_name: str) -> Token:
+        """Create an account. The returned token signs the new user in."""
+        payload = self._request(
+            "POST",
+            f"{self._v1}/auth/register",
+            json={"email": email, "password": password, "full_name": full_name},
+        )
+        return Token.from_json(payload)
+
+    def login(self, email: str, password: str) -> Token:
+        payload = self._request(
+            "POST",
+            f"{self._v1}/auth/login",
+            json={"email": email, "password": password},
+        )
+        return Token.from_json(payload)
+
+    def logout(self) -> None:
+        self._request("POST", f"{self._v1}/auth/logout")
+
+    def me(self) -> User:
+        """The signed-in user. Raises ApiError with status 401 if the token is stale."""
+        return User.from_json(self._request("GET", f"{self._v1}/auth/me"))
