@@ -54,7 +54,8 @@ The GUI never touches the database. Business logic never appears in widgets or
 in route handlers.
 
 Design decisions and their rationale are recorded in
-[`docs/DECISIONS.md`](docs/DECISIONS.md).
+[`docs/DECISIONS.md`](docs/DECISIONS.md); current build status and what is
+next are in [`docs/PROGRESS.md`](docs/PROGRESS.md).
 
 ## Features
 
