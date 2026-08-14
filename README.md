@@ -2,7 +2,8 @@
 
 > Personal finance and subscription intelligence — a desktop application.
 
-**Status:** in development (Phase 3 — authentication; register, sign in, sign out)
+**Status:** in development (Phase 4 — transactions and categories; recording,
+filtering, editing and deleting, with a paged transactions table)
 
 FinSight helps a single user understand where their money goes: spending by
 category, budget health, savings trends, and — its distinguishing feature —
@@ -137,6 +138,7 @@ frontend/
   client/
     api/           the only place the client makes HTTP calls
     core/          client configuration and session state
+    models/        Qt item models — the adapter between data and a view
     views/         one view per section
     widgets/       reusable interface components
     resources/     stylesheet
