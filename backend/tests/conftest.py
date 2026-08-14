@@ -11,7 +11,8 @@ broken migration fails the suite rather than being discovered later.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -123,3 +124,64 @@ def client(test_settings: Settings, db_session: Session) -> Iterator[TestClient]
         yield test_client
 
     app.dependency_overrides.clear()
+
+
+# ─── Registered accounts ──────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Account:
+    """A registered user, with what a test needs to act as them."""
+
+    id: int
+    email: str
+    password: str
+    token: str
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.token}"}
+
+
+DEFAULT_PASSWORD = "a-good-enough-password"
+
+
+@pytest.fixture
+def make_account(client: TestClient) -> Callable[..., Account]:
+    """Factory: register an account and return it signed in.
+
+    A factory rather than a plain fixture because the interesting tests need
+    *two* accounts — every endpoint is checked to answer 404, not 403 or 200,
+    when handed another user's row id.
+    """
+
+    def _make(
+        email: str = "sayed@example.com",
+        full_name: str = "Md. Abu Sayed",
+        password: str = DEFAULT_PASSWORD,
+    ) -> Account:
+        response = client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "password": password, "full_name": full_name},
+        )
+        assert response.status_code == 201, response.text
+        token = response.json()["access_token"]
+
+        me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert me.status_code == 200, me.text
+
+        return Account(id=me.json()["id"], email=email, password=password, token=token)
+
+    return _make
+
+
+@pytest.fixture
+def account(make_account: Callable[..., Account]) -> Account:
+    """The user a test acts as."""
+    return make_account()
+
+
+@pytest.fixture
+def other_account(make_account: Callable[..., Account]) -> Account:
+    """A second user, whose data the first must never be able to reach."""
+    return make_account(email="intruder@example.com", full_name="Someone Else")

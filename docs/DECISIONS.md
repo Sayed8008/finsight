@@ -291,3 +291,30 @@ the API. Every one of those rules is also enforced server-side.
 instead of after a round trip. It is not a security measure — anyone can call
 the API directly, so the server is the only authority. Validating in one place
 only would mean either a sluggish interface or an unprotected API.
+
+---
+
+## ADR-020 — Categories have no DELETE endpoint
+**Date:** 2026-08-15 · **Status:** Accepted
+
+A category is retired with `PATCH /categories/{id} {"is_active": false}`.
+There is no `DELETE /categories/{id}`.
+
+**Why:** The foreign key from `transactions.category_id` is `ON DELETE
+RESTRICT`, so the database would refuse to delete any category that had ever
+been used. An endpoint that works only for unused categories and answers 409
+for the rest is a worse interface than not offering one: the caller has to
+handle deactivation as a fallback anyway, so deactivation may as well be the
+only path.
+
+`category_type` is immutable for a related reason — flipping an expense
+category to income would silently invalidate every transaction filed under it.
+Changing a type means creating a category and moving the transactions across,
+which is a deliberate act rather than a field edit.
+
+**Rejected:** a `DELETE` that soft-deletes. A verb that says "delete" while
+setting a flag reads fine and surprises everyone later.
+
+**Consequence:** the list endpoint hides deactivated categories unless asked
+(`include_inactive=true`), so the form pickers that call it cannot offer a
+retired category for a new transaction.
