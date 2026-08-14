@@ -88,15 +88,15 @@ cp .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into SECRET_KEY
 ```
 
-**3. Create the database** (not needed until Phase 2)
-
-Edit `scripts/setup_database.sql` to set a password, then:
+**3. Create the database**
 
 ```bash
-sudo mysql < scripts/setup_database.sql
+./scripts/setup_database.sh
 ```
 
-Put the same password into `DATABASE_URL` and `TEST_DATABASE_URL` in `.env`.
+The script asks for a new password, creates the `finsight` and `finsight_test`
+databases and a MySQL user restricted to them, then writes the connection URLs
+into `.env`. The password is never stored in a tracked file.
 
 **4. Run**
 
