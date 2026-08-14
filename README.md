@@ -2,7 +2,7 @@
 
 > Personal finance and subscription intelligence — a desktop application.
 
-**Status:** in development (Phase 1 — application skeleton; both halves run)
+**Status:** in development (Phase 2 — database schema and migrations)
 
 FinSight helps a single user understand where their money goes: spending by
 category, budget health, savings trends, and — its distinguishing feature —
@@ -98,7 +98,15 @@ The script asks for a new password, creates the `finsight` and `finsight_test`
 databases and a MySQL user restricted to them, then writes the connection URLs
 into `.env`. The password is never stored in a tracked file.
 
-**4. Run**
+**4. Apply database migrations**
+
+```bash
+cd backend && ../.venv/bin/python -m alembic upgrade head
+```
+
+Schema details and migration commands are in [`docs/DATABASE.md`](docs/DATABASE.md).
+
+**5. Run**
 
 ```bash
 ./scripts/dev.sh              # Linux/macOS — starts backend and client

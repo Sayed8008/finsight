@@ -184,3 +184,49 @@ Qt views are screenshotted offscreen (`QT_QPA_PLATFORM=offscreen` plus
 the source: `QListWidget` in a stretched layout silently clipped its last item
 ("Settings"), and Qt stylesheets ignore `max-width`, so the placeholder text
 wrapped to the width of its title. Both now have regression tests.
+
+---
+
+## ADR-013 — The database URL is never written in `alembic.ini`
+**Date:** 2026-08-15 · **Status:** Accepted
+
+`alembic/env.py` reads the connection URL from application settings, or from
+`-x db_url=...` on the command line.
+
+**Why:** `alembic.ini` is tracked by git and the connection URL contains the
+database password. Alembic's generated default puts the URL straight into the
+ini file, which would publish the credential in a public repository.
+
+---
+
+## ADR-014 — Test schemas are built by running migrations
+**Date:** 2026-08-15 · **Status:** Accepted
+
+The test database is created by `alembic upgrade head`, not
+`Base.metadata.create_all`. A further test asserts that autogenerate finds no
+difference between the models and the migrated schema.
+
+**Why:** `create_all` builds tables from the models, so it would pass happily
+while the migrations were broken or missing — exactly the failure that only
+appears on a fresh database. Running the real migrations exercises them on
+every test run, and the drift check catches a model changed without a
+corresponding migration.
+
+**Cost:** Slightly slower session startup. Worth it.
+
+---
+
+## ADR-015 — Derived financial values are computed, never stored
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Budget spent/remaining/percentage/status, and subscription monthly/yearly
+equivalents, are calculated on read. No column stores them.
+
+**Why:** A stored total is a cache, and it goes stale the instant a
+transaction is added, edited, deleted, or recategorised. Keeping it correct
+would mean invalidation logic on every write path. Recomputing from an indexed
+aggregate query is fast at this data size and cannot be wrong.
+
+**Revisit if:** aggregate queries become measurably slow — measure first.
+
+---
