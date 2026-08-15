@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from client.api.client import ApiError, ApiUnavailableError
-from client.api.dto import Token, User
+from client.api.dto import Dashboard, Token, User
 from client.views.auth_view import LOGIN_PAGE, REGISTER_PAGE
 from client.views.main_window import APP_PAGE, AUTH_PAGE, MainWindow
 from client.widgets.sidebar import NAV_ITEMS
@@ -57,6 +57,15 @@ class StubApi:
 
     def me(self) -> User:
         return USER
+
+    def dashboard(self, **kwargs) -> Dashboard:
+        """Signing in lands on the dashboard, so the shell fetches it at once.
+
+        An empty one is enough here: these tests are about the shell, not the
+        dashboard's contents.
+        """
+        self.calls.append("dashboard")
+        return Dashboard.empty()
 
 
 class StubApiOffline(StubApi):

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QWidget
 from client.api.client import ApiClient
 from client.api.dto import User
 from client.views.budgets_view import BudgetsView
+from client.views.dashboard_view import DashboardView
 from client.views.placeholder import PlaceholderView
 from client.views.subscriptions_view import SubscriptionsView
 from client.views.transactions_view import TransactionsView
@@ -26,13 +27,10 @@ logger = logging.getLogger(__name__)
 TRANSACTIONS = "transactions"
 BUDGETS = "budgets"
 SUBSCRIPTIONS = "subscriptions"
+DASHBOARD = "dashboard"
 
 # What each section will contain, shown until the real view is built.
 SECTION_DESCRIPTIONS: dict[str, tuple[str, str]] = {
-    "dashboard": (
-        "Dashboard",
-        "Balance, monthly summary, charts and insights will appear here.",
-    ),
     "analytics": (
         "Analytics",
         "Spending trends and category comparisons over a chosen period.",
@@ -54,6 +52,7 @@ class MainView(QWidget):
         self.setObjectName("Root")
         self._api = api_client
         self._currency = ""
+        self._display_name = ""
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -64,6 +63,8 @@ class MainView(QWidget):
         self.sidebar.sign_out_requested.connect(self.sign_out_requested.emit)
         layout.addWidget(self.sidebar)
 
+        self.dashboard_view = DashboardView(api_client)
+        self.dashboard_view.navigate_requested.connect(self.go_to)
         self.transactions_view = TransactionsView(api_client)
         self.budgets_view = BudgetsView(api_client)
         self.subscriptions_view = SubscriptionsView(api_client)
@@ -77,6 +78,7 @@ class MainView(QWidget):
 
     def _page_for(self, key: str) -> QWidget:
         real_views: dict[str, QWidget] = {
+            DASHBOARD: self.dashboard_view,
             TRANSACTIONS: self.transactions_view,
             BUDGETS: self.budgets_view,
             SUBSCRIPTIONS: self.subscriptions_view,
@@ -91,6 +93,22 @@ class MainView(QWidget):
         # The currency is per user, so amounts cannot be labelled until someone
         # is signed in.
         self._currency = user.currency_code
+        self._display_name = user.full_name
+        # The dashboard is the landing section, so it is already on screen when
+        # this runs — it has to be told to load rather than waiting to be
+        # navigated to.
+        self.dashboard_view.load_once(self._currency, self._display_name)
+
+    def go_to(self, key: str) -> None:
+        """Open a section from somewhere other than the sidebar.
+
+        Moves the sidebar selection too, so the highlighted item never
+        disagrees with what is on screen.
+        """
+        for index, nav in enumerate(NAV_ITEMS):
+            if nav.key == key:
+                self.sidebar.select(index)
+                return
 
     def _show_section(self, key: str) -> None:
         index = self.page_index.get(key)
@@ -100,7 +118,9 @@ class MainView(QWidget):
         # Data is fetched when a section is first opened rather than at
         # construction: a user who stays on the dashboard should not pay for a
         # query they never look at.
-        if key == TRANSACTIONS:
+        if key == DASHBOARD:
+            self.dashboard_view.load_once(self._currency, self._display_name)
+        elif key == TRANSACTIONS:
             self.transactions_view.load_once(self._currency)
         elif key == BUDGETS:
             self.budgets_view.load_once(self._currency)

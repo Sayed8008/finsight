@@ -610,6 +610,126 @@ QCheckBox::indicator:disabled {
     background-color: transparent;
 }
 
+/* ─── Dashboard ─────────────────────────────────────────────────────────── */
+
+#DashboardScroll,
+#DashboardPage,
+#DashboardMiddle,
+#TileRow,
+#RecentList,
+#RecentRow {
+    background-color: transparent;
+}
+
+#DashboardPanel {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-radius: 8px;
+}
+
+#PanelTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+/* ─── Stat tiles ────────────────────────────────────────────────────────── */
+
+#StatTile,
+#HeroTile {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-radius: 8px;
+}
+
+#StatCaption {
+    font-size: 12px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+#StatValue {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+/* The lead figure is larger on purpose: a row of six equally loud numbers has
+ * no lead, and the eye has nowhere to land. */
+#HeroValue {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #0f1419;
+    background-color: transparent;
+}
+
+/* Tone is a status, never decoration — used only where the sign has meaning. */
+#StatValue[tone="positive"],
+#HeroValue[tone="positive"] { color: #1a7f4b; }
+#StatValue[tone="negative"],
+#HeroValue[tone="negative"] { color: #b4232c; }
+
+#StatDetail {
+    font-size: 12px;
+    color: #8b939c;
+    background-color: transparent;
+}
+
+/* ─── Recent activity ───────────────────────────────────────────────────── */
+
+#RecentDescription {
+    font-size: 13px;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#RecentMeta {
+    font-size: 11px;
+    color: #8b939c;
+    background-color: transparent;
+}
+
+#RecentAmount {
+    font-size: 13px;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+/* The same pair the transactions table uses, so a colour means one thing
+ * across the whole application. */
+#RecentAmount[direction="income"]  { color: #1a7f4b; }
+#RecentAmount[direction="expense"] { color: #b4232c; }
+
+/* ─── Attention bar ─────────────────────────────────────────────────────── */
+
+#AttentionBar {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-left: 3px solid #cdd2d9;
+    border-radius: 8px;
+}
+
+#AttentionBar[state="warning"] { border-left-color: #d9782e; }
+#AttentionBar[state="calm"]    { border-left-color: #1a7f4b; }
+
+#AttentionText {
+    font-size: 13px;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+/* ─── Charts ────────────────────────────────────────────────────────────── */
+
+#SpendingChart,
+#SpendingChartView,
+#ChartEmptyState {
+    background-color: transparent;
+    border: none;
+}
+
 /* ─── Dialogs ───────────────────────────────────────────────────────────── */
 
 #TransactionDialog,

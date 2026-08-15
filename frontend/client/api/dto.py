@@ -35,6 +35,15 @@ class Token:
         )
 
 
+#: Titles that are not names. Matched case-insensitively with any trailing dot
+#: removed, so "Md.", "MD" and "md" all count. Kept deliberately short: the
+#: cost of missing one is a slightly odd greeting, while the cost of being
+#: over-eager is dropping a real name.
+HONORIFICS = frozenset(
+    {"md", "mohammad", "muhammad", "mst", "mrs", "mr", "ms", "miss", "dr", "prof", "eng"}
+)
+
+
 @dataclass(frozen=True)
 class User:
     """The signed-in user, as the API describes them."""
@@ -59,11 +68,29 @@ class User:
 
     @property
     def first_name(self) -> str:
-        return self.full_name.split()[0] if self.full_name.strip() else self.email
+        """The name to greet someone by.
+
+        Not simply the first word. "Md. Abu Sayed" would give "Md." — an
+        honorific, not a name — and greeting a user by their title reads as a
+        bug to the one person guaranteed to notice. Leading honorifics are
+        skipped, and a name that is *only* an honorific falls back to the whole
+        string rather than to nothing.
+        """
+        words = self.full_name.split()
+        if not words:
+            return self.email
+
+        for word in words:
+            if word.lower().rstrip(".") not in HONORIFICS:
+                return word
+        return self.full_name
 
 
 INCOME = "income"
 EXPENSE = "expense"
+
+#: Zero, as a Decimal. Used for empty states, so no widget invents `0.0`.
+ZERO = Decimal("0.00")
 
 
 @dataclass(frozen=True)
@@ -319,3 +346,112 @@ class SubscriptionSummary:
     @classmethod
     def empty(cls) -> SubscriptionSummary:
         return cls(0, 0, 0, Decimal("0.00"), Decimal("0.00"), None)
+
+
+@dataclass(frozen=True)
+class PeriodTotals:
+    """Income, expense and what was kept over a period."""
+
+    income: Decimal
+    expense: Decimal
+    net: Decimal
+    transaction_count: int
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> PeriodTotals:
+        return cls(
+            income=Decimal(payload["income"]),
+            expense=Decimal(payload["expense"]),
+            net=Decimal(payload["net"]),
+            transaction_count=int(payload["transaction_count"]),
+        )
+
+    @property
+    def overspent(self) -> bool:
+        return self.net < 0
+
+
+@dataclass(frozen=True)
+class CategoryShare:
+    """One row of the spending breakdown."""
+
+    category_id: int | None
+    name: str
+    color: str | None
+    total: Decimal
+    percentage: Decimal
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> CategoryShare:
+        return cls(
+            category_id=payload.get("category_id"),
+            name=payload["name"],
+            color=payload.get("color"),
+            total=Decimal(payload["total"]),
+            percentage=Decimal(payload["percentage"]),
+        )
+
+    @property
+    def is_folded_tail(self) -> bool:
+        """The "Other categories" row, which is a sum rather than a category."""
+        return self.category_id is None
+
+
+@dataclass(frozen=True)
+class BudgetHealth:
+    """How many budgets sit in each state."""
+
+    total: int
+    on_track: int
+    warning: int
+    exceeded: int
+    needs_attention: int
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> BudgetHealth:
+        return cls(
+            total=int(payload["total"]),
+            on_track=int(payload["on_track"]),
+            warning=int(payload["warning"]),
+            exceeded=int(payload["exceeded"]),
+            needs_attention=int(payload["needs_attention"]),
+        )
+
+
+@dataclass(frozen=True)
+class Dashboard:
+    """Everything the first screen needs, from one request."""
+
+    period_start: date_type
+    period_end: date_type
+    totals: PeriodTotals
+    spending: tuple[CategoryShare, ...]
+    recent: tuple[Transaction, ...]
+    budgets: BudgetHealth
+    subscriptions: SubscriptionSummary
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Dashboard:
+        return cls(
+            period_start=date_type.fromisoformat(payload["period_start"]),
+            period_end=date_type.fromisoformat(payload["period_end"]),
+            totals=PeriodTotals.from_json(payload["totals"]),
+            spending=tuple(CategoryShare.from_json(row) for row in payload["spending"]),
+            recent=tuple(Transaction.from_json(row) for row in payload["recent"]),
+            budgets=BudgetHealth.from_json(payload["budgets"]),
+            subscriptions=SubscriptionSummary.from_json(payload["subscriptions"]),
+        )
+
+    @classmethod
+    def empty(cls) -> Dashboard:
+        """The shape to show before anything has loaded, or after a failure."""
+        today = date_type.today()
+        return cls(
+            period_start=today,
+            period_end=today,
+            totals=PeriodTotals(ZERO, ZERO, ZERO, 0),
+            spending=(),
+            recent=(),
+            budgets=BudgetHealth(0, 0, 0, 0, 0),
+            subscriptions=SubscriptionSummary.empty(),
+        )

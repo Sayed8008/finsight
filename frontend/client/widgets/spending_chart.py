@@ -1,0 +1,187 @@
+"""Spending by category, as a ranked horizontal bar chart.
+
+**Why not a donut.** The obvious choice for "spending by category" is a pie, and
+it is the wrong one. The reader's job here is to compare magnitudes and find the
+largest — and angles are much harder to compare than lengths, especially for the
+close values that matter most ("is Food or Transport bigger this month?"). A pie
+is defensible only for part-to-whole at a glance with a handful of segments; a
+ranked bar answers the actual question directly. The percentage is printed
+beside each bar, so the part-to-whole reading is not lost.
+
+**Why one colour.** Colour here would encode identity, but identity is already
+carried by the category name on the axis — so a second encoding adds nothing and
+costs a great deal: nine categorical hues cannot be made distinguishable for
+every pair at once, which was measured rather than assumed (ADR-026). Length
+encodes magnitude; the axis labels encode identity; colour stays out of it.
+
+Horizontal rather than vertical because category names are words, and words set
+sideways under a vertical bar are unreadable.
+"""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from PySide6.QtCharts import (
+    QBarCategoryAxis,
+    QBarSet,
+    QChart,
+    QChartView,
+    QHorizontalBarSeries,
+    QValueAxis,
+)
+from PySide6.QtCore import QMargins, Qt
+from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtWidgets import QLabel, QStackedWidget, QVBoxLayout, QWidget
+
+from client.api.dto import CategoryShare
+
+#: The single hue every bar is drawn in — the interface's primary blue.
+BAR_COLOUR = QColor("#1a56c4")
+# The folded "Other categories" row needs no colour of its own: its label says
+# what it is, and a second fill would imply it is a category like the others.
+
+GRID_COLOUR = QColor("#eef0f3")
+LABEL_COLOUR = QColor("#6b7480")
+
+CHART_PAGE = 0
+EMPTY_PAGE = 1
+
+
+class SpendingChart(QStackedWidget):
+    """A ranked bar chart of spending, or an empty state when there is none."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("SpendingChart")
+
+        self._currency = ""
+        self._shares: tuple[CategoryShare, ...] = ()
+
+        self.chart = QChart()
+        self.chart.legend().setVisible(False)  # one series; the title names it
+        self.chart.setBackgroundVisible(False)
+        self.chart.setPlotAreaBackgroundVisible(False)
+        self.chart.setMargins(QMargins(0, 0, 0, 0))
+        self.chart.setAnimationOptions(QChart.AnimationOption.NoAnimation)
+
+        self.view = QChartView(self.chart)
+        self.view.setObjectName("SpendingChartView")
+        self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.addWidget(self.view)
+
+        self.addWidget(self._build_empty_state())
+
+    def _build_empty_state(self) -> QWidget:
+        """A chart with no data needs words, not an empty pair of axes."""
+        panel = QWidget()
+        panel.setObjectName("ChartEmptyState")
+        box = QVBoxLayout(panel)
+        box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        box.setSpacing(6)
+
+        self.empty_title = QLabel("Nothing spent yet")
+        self.empty_title.setObjectName("EmptyTitle")
+        self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        box.addWidget(self.empty_title)
+
+        self.empty_message = QLabel("Record an expense to see where the money goes.")
+        self.empty_message.setObjectName("EmptyMessage")
+        self.empty_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        box.addWidget(self.empty_message)
+
+        return panel
+
+    # ─── Data ─────────────────────────────────────────────────────────────
+
+    def set_currency(self, code: str) -> None:
+        self._currency = code
+
+    def set_shares(self, shares: tuple[CategoryShare, ...]) -> None:
+        """Redraw for a new breakdown, or show the empty state."""
+        self._shares = shares
+
+        if not shares:
+            self.setCurrentIndex(EMPTY_PAGE)
+            return
+
+        self.setCurrentIndex(CHART_PAGE)
+        self._rebuild(shares)
+
+    def _rebuild(self, shares: tuple[CategoryShare, ...]) -> None:
+        """Rebuild the series and axes from scratch.
+
+        A handful of bars, redrawn a few times a session — rebuilding is
+        simpler than mutating in place and cannot leave a stale bar behind.
+        """
+        self.chart.removeAllSeries()
+        for axis in list(self.chart.axes()):
+            self.chart.removeAxis(axis)
+
+        # A horizontal bar chart reads bottom-to-top, so the order is reversed
+        # to put the largest at the top where the eye starts.
+        ordered = list(reversed(shares))
+
+        series = QHorizontalBarSeries()
+        series.setBarWidth(0.55)  # thin marks, generous gaps
+        series.setLabelsVisible(False)
+
+        bars = QBarSet("")
+        bars.setBorderColor(Qt.GlobalColor.transparent)
+        for share in ordered:
+            bars.append(float(share.total))
+        bars.setColor(BAR_COLOUR)
+        series.append(bars)
+        self.chart.addSeries(series)
+
+        categories = QBarCategoryAxis()
+        categories.append([self._axis_label(share) for share in ordered])
+        categories.setGridLineVisible(False)
+        categories.setLineVisible(False)
+        categories.setLabelsColor(LABEL_COLOUR)
+        categories.setLabelsFont(QFont("", 9))
+        self.chart.addAxis(categories, Qt.AlignmentFlag.AlignLeft)
+        series.attachAxis(categories)
+
+        values = QValueAxis()
+        values.setRange(0, self._axis_maximum(shares))
+        values.setLabelFormat("%.0f")
+        values.setGridLineColor(GRID_COLOUR)
+        values.setLineVisible(False)
+        values.setLabelsColor(LABEL_COLOUR)
+        values.setLabelsFont(QFont("", 9))
+        values.setTickCount(5)
+        # Rounds the range and ticks to readable numbers. Without it the axis
+        # inherits the 10% headroom and reads 0, 4125, 8250 — arithmetically
+        # correct and useless to a person.
+        values.applyNiceNumbers()
+        self.chart.addAxis(values, Qt.AlignmentFlag.AlignBottom)
+        series.attachAxis(values)
+
+    def _axis_label(self, share: CategoryShare) -> str:
+        """Name plus share, so part-to-whole survives the move away from a pie."""
+        return f"{share.name}  {share.percentage:.0f}%"
+
+    @staticmethod
+    def _axis_maximum(shares: tuple[CategoryShare, ...]) -> float:
+        """A little headroom above the largest bar, never a zero-width axis."""
+        largest = max((share.total for share in shares), default=Decimal("0"))
+        return float(largest) * 1.1 if largest > 0 else 1.0
+
+    # ─── For tests ────────────────────────────────────────────────────────
+
+    @property
+    def bar_values(self) -> list[float]:
+        """The plotted values, top row first. Empty when the chart is empty."""
+        for series in self.chart.series():
+            for bar_set in series.barSets():
+                return [bar_set.at(i) for i in reversed(range(bar_set.count()))]
+        return []
+
+    @property
+    def axis_labels(self) -> list[str]:
+        """The category labels, top row first."""
+        for axis in self.chart.axes():
+            if isinstance(axis, QBarCategoryAxis):
+                return list(reversed(axis.categories()))
+        return []

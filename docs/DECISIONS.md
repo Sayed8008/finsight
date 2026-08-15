@@ -488,3 +488,46 @@ stays within rounding of yearly, since the interface shows both together.
 **Rejected:** storing the schedule as a list of future dates. It would need
 regenerating on every edit and would go stale exactly like a cached total
 (ADR-015).
+
+---
+
+## ADR-026 — Chart colour is measured, and category hues are not a chart palette
+**Date:** 2026-08-15 · **Status:** Accepted
+
+The default category colours were re-picked by running them through a
+colour-vision and contrast validator, and charts do **not** colour series by
+category.
+
+**What the measurement found.** `default_categories.py` claimed its colours were
+"chosen to stay distinguishable when used as chart series". Validated, the
+original set failed three checks:
+
+| Check | Result |
+|---|---|
+| Chroma floor | `#4a5259`, `#7a6a4f`, `#8b939c` read as grey |
+| Colour-vision separation | `#8a4fbd` ↔ `#1a56c4` ΔE **2.2** under protanopia — the same colour |
+| Normal-vision floor | `#d9782e` ↔ `#c4472f` ΔE **11.8**, below the floor of 15 |
+
+The claim was written from eyeballing, and eyeballing cannot answer this. The
+replacements pass all five checks as an adjacent-pair sequence, which is the
+right test because a category colour always appears as a swatch beside its own
+name.
+
+**Why charts do not use them.** Measured again with all pairs compared rather
+than only adjacent ones, **nine categorical hues cannot be made safe** — the
+best nine-colour set still collapses somewhere (`#4d8b1f` ↔ `#d9782e` at ΔE 1.8
+under protanopia). That is a property of the colour space, not of the choices.
+So the spending chart uses **one hue** and encodes magnitude by bar length,
+with identity carried by the axis labels.
+
+**Why a ranked bar and not a donut.** The reader's job is to compare magnitudes
+and find the largest. Lengths against a shared baseline are easy to compare;
+angles are not, least of all for the close values that matter most. A pie earns
+its place only for part-to-whole at a glance with few segments. The percentage
+is printed beside each bar so the part-to-whole reading is not lost.
+
+**Consequence:** existing accounts keep the colours seeded when they registered
+— the column is per-user and editable. Only new accounts get the validated set.
+
+**Corollary:** past six categories the tail is folded into one "Other
+categories" row, computed server-side so the shares still sum to 100.

@@ -147,3 +147,13 @@ class Sidebar(QFrame):
 
     def current_key(self) -> str:
         return NAV_ITEMS[self._list.currentRow()].key
+
+    def select(self, row: int) -> None:
+        """Move the selection, as if the user had clicked it.
+
+        Needed because the dashboard links onward to other sections. Setting
+        the page directly would leave the sidebar highlighting one section
+        while a different one is on screen.
+        """
+        if 0 <= row < len(NAV_ITEMS):
+            self._list.setCurrentRow(row)

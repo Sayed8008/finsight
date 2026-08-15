@@ -19,6 +19,7 @@ import httpx2
 from client.api.dto import (
     Budget,
     Category,
+    Dashboard,
     Subscription,
     SubscriptionSummary,
     Token,
@@ -339,6 +340,22 @@ class ApiClient:
 
     def delete_subscription(self, subscription_id: int) -> None:
         self._request("DELETE", f"{self._v1}/subscriptions/{subscription_id}")
+
+    # ─── Dashboard ────────────────────────────────────────────────────────
+    def dashboard(
+        self, *, period_start: str | None = None, period_end: str | None = None
+    ) -> Dashboard:
+        """Everything the first screen needs, in one request.
+
+        Deliberately one call rather than five. Five would mean five loading
+        states and five chances to show figures taken at different moments.
+        """
+        payload = self._request(
+            "GET",
+            f"{self._v1}/dashboard",
+            params=_without_none({"period_start": period_start, "period_end": period_end}),
+        )
+        return Dashboard.from_json(payload)
 
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:

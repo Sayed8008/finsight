@@ -138,7 +138,15 @@ class SubscriptionResponse(BaseModel):
 
 
 class SubscriptionSummary(BaseModel):
-    """What the user is committed to, across every active subscription."""
+    """What the user is committed to, across every active subscription.
+
+    `from_attributes` matters here as well as on the response models: this is
+    built from a `Commitment` dataclass, and it is nested inside the dashboard
+    response — a nested model without it fails validation rather than reading
+    the attributes of the object it was handed.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
 
     active_count: int
     paused_count: int
