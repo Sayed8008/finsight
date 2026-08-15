@@ -357,6 +357,72 @@ def test_badges_are_rendered(panel: SavingsJourneyPanel) -> None:
     assert panel.badge_titles == ["Personal best", "Improving"]
 
 
+def test_a_badge_says_on_screen_why_it_was_awarded(panel: SavingsJourneyPanel) -> None:
+    """Reported from use: four coloured words with no visible explanation read
+    as decoration. The detail existed, but only in a tooltip — which cannot be
+    reached by keyboard and is no way to read four sentences.
+
+    `savings_rules` states the rule this broke: a badge that cannot say why it
+    appeared is decoration.
+    """
+    panel.set_journey(
+        journey(
+            span(3),
+            badges=(
+                SavingsBadge(
+                    code="personal_best",
+                    title="Personal best",
+                    detail="41,361.00 saved — your highest month yet.",
+                ),
+            ),
+        )
+    )
+
+    assert "Personal best" in panel.badge_details_text
+    assert "41,361.00 saved" in panel.badge_details_text
+
+
+def test_every_badge_contributes_its_reason(panel: SavingsJourneyPanel) -> None:
+    awarded = (
+        SavingsBadge(code="personal_best", title="Personal best", detail="highest yet."),
+        SavingsBadge(code="improving", title="Improving", detail="2,000.00 more."),
+    )
+    panel.set_journey(journey(span(3), badges=awarded))
+
+    for badge in awarded:
+        assert badge.title in panel.badge_details_text
+        assert badge.detail in panel.badge_details_text
+
+
+def test_the_reason_line_is_hidden_when_nothing_is_earned(panel: SavingsJourneyPanel) -> None:
+    """An empty muted line under an empty badge row is a gap in the layout."""
+    panel.set_journey(journey(span(3)))
+
+    assert panel.badge_details_text == ""
+
+
+def test_the_reasons_do_not_accumulate(panel: SavingsJourneyPanel) -> None:
+    """The line is rebuilt, not appended to — the fault the badge row itself
+    had before it was fixed."""
+    badge = SavingsBadge(code="improving", title="Improving", detail="2,000.00 more.")
+    for _ in range(4):
+        panel.set_journey(journey(span(3), badges=(badge,)))
+
+    assert panel.badge_details_text.count("Improving") == 1
+
+
+def test_the_tooltip_is_kept_as_well(panel: SavingsJourneyPanel) -> None:
+    """Putting the reason on screen does not remove it from the pill, for
+    anyone hovering one badge in particular."""
+    from PySide6.QtWidgets import QLabel
+
+    badge = SavingsBadge(code="improving", title="Improving", detail="2,000.00 more.")
+    panel.set_journey(journey(span(3), badges=(badge,)))
+    chips = [c for c in panel.findChildren(QLabel) if c.objectName() == "SavingsBadge"]
+
+    assert chips and chips[0].toolTip() == "2,000.00 more."
+
+
 def test_badges_do_not_accumulate_across_renders(panel: SavingsJourneyPanel) -> None:
     """A layout is as capable of stacking a previous render as a chart scene."""
     badge = SavingsBadge(code="improving", title="Improving", detail="y")

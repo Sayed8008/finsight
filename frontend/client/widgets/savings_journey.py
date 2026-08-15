@@ -85,6 +85,20 @@ class SavingsJourneyPanel(QFrame):
         self._badge_layout.addStretch(1)
         box.addWidget(self._badge_row)
 
+        # What each badge was awarded for, in the order the pills appear.
+        #
+        # The detail used to live only in a tooltip, which made a row of
+        # coloured words look like decoration — the exact thing
+        # `savings_rules` says a badge must not be. Hover is also no way to
+        # read four sentences, and there is no keyboard path to a tooltip at
+        # all. So the reason is on the screen, and the tooltip stays as well
+        # for anyone who hovers one pill in particular.
+        self._badge_details = QLabel("")
+        self._badge_details.setObjectName("SavingsBadgeDetails")
+        self._badge_details.setWordWrap(True)
+        self._badge_details.setVisible(False)
+        box.addWidget(self._badge_details)
+
         self._observations = QLabel("")
         self._observations.setObjectName("SavingsObservations")
         self._observations.setWordWrap(True)
@@ -277,6 +291,14 @@ class SavingsJourneyPanel(QFrame):
         self._badge_layout.addStretch(1)
         self._badge_row.setVisible(bool(badges))
 
+        # Titled, so a sentence can be matched to the pill it belongs to. A
+        # colon rather than a dash: several of the details contain an em dash
+        # already, and two in one clause reads as a stutter.
+        self._badge_details.setText(
+            " · ".join(f"{badge.title}: {badge.detail}" for badge in badges)
+        )
+        self._badge_details.setVisible(bool(badges))
+
     def _render_observations(self, observations: tuple[str, ...]) -> None:
         self._observations.setText(" · ".join(observations))
         self._observations.setVisible(bool(observations))
@@ -297,6 +319,16 @@ class SavingsJourneyPanel(QFrame):
         chips — which a stored list would not show.
         """
         return [label.text() for label in self._badge_row.findChildren(QLabel, "SavingsBadge")]
+
+    @property
+    def badge_details_text(self) -> str:
+        """What is actually on screen explaining the badges.
+
+        Read from the label rather than the payload: the fault this exists to
+        prevent is a badge whose reason is present in the data but invisible
+        to the reader.
+        """
+        return self._badge_details.text()
 
     @property
     def observations_text(self) -> str:
