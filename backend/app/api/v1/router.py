@@ -15,6 +15,7 @@ from app.api.v1 import (
     budgets,
     categories,
     dashboard,
+    insights,
     subscriptions,
     transactions,
 )
@@ -27,3 +28,4 @@ api_router.include_router(budgets.router)
 api_router.include_router(subscriptions.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(analytics.router)
+api_router.include_router(insights.router)

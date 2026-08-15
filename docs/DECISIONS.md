@@ -580,3 +580,56 @@ backend is down say it once.
 
 **Applies to:** any future screen making more than one call. The dashboard is
 unaffected, since it makes exactly one by design.
+
+---
+
+## ADR-029 — Insight rules are pure functions over a snapshot
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Each rule is a function from an `InsightSnapshot` to zero or more insights. No
+rule touches a session, a clock, or an HTTP request; the snapshot carries
+everything, including what day it is. One service gathers it, once.
+
+**Why:** three things follow that do not otherwise.
+
+1. **Every rule is testable in three lines.** Build the fields it reads, call
+   it, assert. Forty-six unit tests cover every threshold and boundary without
+   a database between them.
+2. **The cost of the screen is fixed.** Queries all happen in one place, so
+   "how expensive is the insights page" has an answer that does not depend on
+   which rules happen to fire. A rule that queried would make that
+   unanswerable — and would have made the query-count test meaningless.
+3. **Adding a rule cannot break the others.** It is a function appended to a
+   list.
+
+**The rule that has to hold for all of them:** *every insight explains itself*.
+Each states the figure it found and what it was compared against. "Unusual
+spending detected" is a shrug with a badge. There is a test asserting that
+every insight any rule produces contains a digit and more than twenty
+characters of explanation — it applies to rules not yet written.
+
+**Consequence:** a rule needing data the snapshot lacks adds a field to the
+snapshot. It does not reach for a session.
+
+---
+
+## ADR-030 — The dashboard renders insights; it does not judge
+**Date:** 2026-08-15 · **Status:** Accepted
+
+The dashboard's attention bar shows the top insight from the same endpoint the
+insights screen uses. It no longer works out its own line from budget counts
+and the next renewal.
+
+**Why:** ADR-008 said reminders would be a view over the insights engine rather
+than a parallel subsystem. Phase 7 shipped an attention bar before that engine
+existed, which left two places deciding what deserves attention — free to
+disagree the moment either threshold moved. Now there is one.
+
+**Consequence:** the dashboard payload carries `insights` and
+`needs_attention`. A test asserts the codes it returns are identical to the
+insights endpoint's, so the two cannot drift.
+
+**Found while doing it:** the insights endpoint was gathering its snapshot
+twice — once for the findings and once for the period they describe — which
+doubled every query behind the screen. Caught by a query-counting test, not by
+reading the code.

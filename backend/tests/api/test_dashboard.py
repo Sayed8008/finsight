@@ -388,7 +388,27 @@ def test_the_dashboard_is_one_request_with_every_section(
         "recent",
         "budgets",
         "subscriptions",
+        # Carried so the dashboard renders findings rather than deciding for
+        # itself what deserves attention (ADR-008).
+        "insights",
+        "needs_attention",
     }
+
+
+def test_the_dashboard_carries_the_same_insights_as_the_insights_screen(
+    client: TestClient, account: Account
+) -> None:
+    """One set of thresholds, not two. The dashboard renders; it does not judge."""
+    set_budget(client, account, "Food", "1000.00")
+    record(client, account, amount="1500.00", category="Food")
+
+    from_dashboard = dashboard(client, account)
+    from_insights = client.get("/api/v1/insights", headers=account.headers, params=MARCH).json()
+
+    assert [i["code"] for i in from_dashboard["insights"]] == [
+        i["code"] for i in from_insights["insights"]
+    ]
+    assert from_dashboard["needs_attention"] == from_insights["needs_attention"]
 
 
 def test_the_dashboard_requires_authentication(client: TestClient) -> None:

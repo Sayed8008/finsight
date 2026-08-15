@@ -21,6 +21,7 @@ from client.api.dto import (
     Category,
     Comparison,
     Dashboard,
+    Insights,
     Subscription,
     SubscriptionSummary,
     Token,
@@ -375,6 +376,18 @@ class ApiClient:
             params=_without_none({"period_start": period_start, "period_end": period_end}),
         )
         return Comparison.from_json(payload)
+
+    # ─── Insights ─────────────────────────────────────────────────────────
+    def insights(
+        self, *, period_start: str | None = None, period_end: str | None = None
+    ) -> Insights:
+        """What the rules found, most urgent first, each explaining itself."""
+        payload = self._request(
+            "GET",
+            f"{self._v1}/insights",
+            params=_without_none({"period_start": period_start, "period_end": period_end}),
+        )
+        return Insights.from_json(payload)
 
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:

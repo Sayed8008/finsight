@@ -3,7 +3,7 @@
 Where the project stands, and what comes next. Updated at the end of each
 phase.
 
-**Last updated:** 2026-08-15 · **Current state:** Phase 8 complete
+**Last updated:** 2026-08-15 · **Current state:** Phase 9 complete
 
 ---
 
@@ -20,7 +20,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 662 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 749 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -40,8 +40,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 662 passed
 | 6 | Subscriptions: model exists; cycle maths and UI | ✅ done |
 | 7 | Dashboard: financial summary, QtCharts, recent activity | ✅ done |
 | 8 | Analytics: aggregation endpoints, period comparison, charts | ✅ done |
-| 9 | Insights: rule engine, severity, explanations | ⬜ next |
-| 9.5 | **Subscription auto-detection** from transaction history | ⬜ |
+| 9 | Insights: rule engine, severity, explanations | ✅ done |
+| 9.5 | **Subscription auto-detection** from transaction history | ⬜ next |
 | 10 | CSV import (preview then commit) and export | ⬜ |
 | 11 | Polish: error/empty/loading states, logging, theming | ⬜ |
 | 12 | Packaging, README, screenshots, demo script | ⬜ |
@@ -87,6 +87,7 @@ ends with a green run.
 | `GET /api/v1/dashboard` | the whole first screen in one payload |
 | `GET /api/v1/analytics/trend` | income and expense per month, gaps filled |
 | `GET /api/v1/analytics/comparison` | a period against the one before it |
+| `GET /api/v1/insights` | what is worth knowing, each explaining itself |
 
 There is no `DELETE /categories/{id}` — see ADR-020. The budget endpoints take
 an optional `as_of` date, which decides `is_current` and `days_remaining`; it
@@ -109,47 +110,53 @@ with sidebar navigation. Five real sections:
   state and renewal wording, and a track/edit dialog.
 - **Analytics** — a grouped monthly trend chart, change tiles, and a table of
   what moved against the previous period.
+- **Insights** — one card per finding, severity in colour and in words, each
+  with the explanation the rule wrote and a link to the screen it concerns.
 
-Only **Settings** is still a placeholder.
+A sixth section, **Insights**, lists what the rules found. Only
+**Settings** is still a placeholder.
 
-**Tests** — 662 passing: security, money, budget-arithmetic and billing-cycle
+**Tests** — 749 passing: security, money, budget-arithmetic and billing-cycle
 unit tests; model/constraint and repository tests against real MySQL; API tests
 for every feature area; and GUI tests via pytest-qt, including pixel checks on
 things no geometry assertion can catch.
 
 ---
 
-## Next: Phase 9 — Insights
+## Next: Phase 9.5 — Subscription auto-detection
 
-A deterministic, explainable rule engine over data that now all exists. Every
-input it needs — budget utilisation, subscription renewals, month-on-month
-comparison — is already computed and tested.
+The feature ADR-007 promoted to its own phase, and the only part of the project
+that is a genuine algorithm rather than CRUD plus arithmetic. It finds
+subscriptions the user never told the application about, by looking for
+recurrence in transactions they already recorded.
 
-1. **Rule engine** — each rule a small pure function over a snapshot, returning
-   zero or more insights with a severity and a written explanation. The shape
-   to copy is `budget_utilisation` / `billing_cycle`: pure, no database, unit
-   tested on its own.
-2. **Endpoint** — `GET /insights`, evaluated on read like everything else
-   (ADR-015). Nothing is stored.
-3. **Insights view** — a list ordered by severity, each saying what it found
-   and why.
+1. **Description normalisation** — strip reference numbers, dates and card
+   digits so "NETFLIX.COM 4021" and "NETFLIX COM" group together.
+2. **Amount clustering with tolerance** — a subscription that rises from 499 to
+   549 is the same subscription, and an exact-match grouping would miss it.
+3. **Interval regularity scoring** — three charges 30, 31 and 29 days apart is
+   monthly; 30, 5 and 62 is not. The score has to survive a missing month.
+4. **Confidence with evidence** — every candidate says which transactions it
+   was built from and why it scored what it did.
+5. **`POST /subscriptions/detect`** — returns candidates. It creates nothing.
 
 **Watch out for:**
 
-- **Every insight must explain itself.** "You spent 32% more on Food" is
-  useful; "Unusual spending detected" is not. The explanation is the feature.
-- Rules must be **pure functions of a snapshot**, not services that query. That
-  is what makes them testable one at a time and what will let Phase 9.5 reuse
-  the same shape.
-- Severity is a small closed set, and the interface must not invent its own
-  thresholds — the mistake ADR-026 and the budget cards already guard against.
-- ADR-008 says reminders are a *view* over insights, not a second subsystem.
-  "Renewal in 2 days" is an insight rule, and the dashboard's attention bar
-  should eventually render insights rather than compute its own line.
-- Do not let a rule need data no endpoint returns. If one does, add it to the
-  snapshot rather than querying inside the rule.
+- **ADR-007 is explicit: detection never creates a subscription silently.** It
+  proposes; the user confirms. A wrong guess that quietly appears in someone's
+  commitment total is worse than no guess.
+- Confidence must be **explainable in the same way insights are** — "four
+  charges of 499.00, 30±1 days apart" and not "87%". The evidence *is* the
+  confidence. `insight_rules` is the shape to copy.
+- Skip candidates that match an existing subscription:
+  `SubscriptionRepository.name_exists` was written for exactly this.
+- The algorithm is pure and belongs in its own module, testable without a
+  database. Only the gathering touches the session.
+- ADR-007 records the honest limitation: detection is bounded by the quality of
+  the description column, and `POS PURCHASE 4021` is unmatchable. Say so in the
+  interface rather than returning nonsense.
 
-**Deliberately deferred:** detection from transaction history (9.5), CSV (10).
+**Deliberately deferred:** CSV import and export (10).
 
 ---
 
@@ -188,6 +195,15 @@ comparison — is already computed and tested.
   readable from the axis and the labels; a tooltip layer is Phase 11 polish.
 - Analytics comparison always uses the immediately preceding window. Comparing
   against the same month last year would need a second mode.
+- Insight thresholds are constants in `insight_rules.py`, not user settings.
+  Gathered and named in one block so they can become settings later without a
+  hunt, but nobody can tune them from the interface today.
+- Insights are recomputed on every request. Correct, and the reason they can
+  never be stale — but it means the screen costs a fixed handful of queries
+  each time it is opened rather than being free to poll.
+- The insights screen has no "dismiss". An insight goes away when the thing it
+  describes changes, which is honest but means a known-and-accepted situation
+  keeps being reported.
 - Renewals are recorded by hand ("Mark renewed"). Nothing advances a billing
   date automatically, because nothing runs when the app is closed. A scheduled
   job would be a service, not a desktop app.

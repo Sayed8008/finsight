@@ -27,6 +27,8 @@ from app.repositories.analytics_repository import AnalyticsRepository, CategoryT
 from app.repositories.transaction_repository import SortField, TransactionRepository
 from app.services.budget_service import BudgetService
 from app.services.budget_utilisation import BudgetStatus
+from app.services.insight_rules import Insight
+from app.services.insight_service import InsightService
 from app.services.subscription_service import Commitment, SubscriptionService
 
 logger = logging.getLogger(__name__)
@@ -90,6 +92,11 @@ class Dashboard:
     recent: list[Transaction]
     budgets: BudgetHealth
     subscriptions: Commitment
+    #: The same insights the insights screen shows, most urgent first. Carried
+    #: here so the dashboard *renders* them rather than deciding for itself
+    #: what deserves attention — one set of thresholds, not two (ADR-008).
+    insights: list[Insight]
+    needs_attention: int
 
 
 class DashboardService:
@@ -99,6 +106,7 @@ class DashboardService:
         self._transactions = TransactionRepository(session)
         self._budgets = BudgetService(session)
         self._subscriptions = SubscriptionService(session)
+        self._insights = InsightService(session)
 
     def build(
         self,
@@ -119,6 +127,7 @@ class DashboardService:
         )
         budgets = self._budget_health(user_id, on_day)
         subscriptions = self._subscriptions.summary(user_id, today=on_day)
+        report = self._insights.report(user_id, start=period_start, end=period_end, today=on_day)
 
         return Dashboard(
             period_start=period_start,
@@ -128,6 +137,8 @@ class DashboardService:
             recent=recent,
             budgets=budgets,
             subscriptions=subscriptions,
+            insights=report.insights,
+            needs_attention=report.needs_attention,
         )
 
     @staticmethod

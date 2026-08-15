@@ -16,6 +16,7 @@ from client.api.dto import User
 from client.views.analytics_view import AnalyticsView
 from client.views.budgets_view import BudgetsView
 from client.views.dashboard_view import DashboardView
+from client.views.insights_view import InsightsView
 from client.views.placeholder import PlaceholderView
 from client.views.subscriptions_view import SubscriptionsView
 from client.views.transactions_view import TransactionsView
@@ -30,6 +31,7 @@ BUDGETS = "budgets"
 SUBSCRIPTIONS = "subscriptions"
 DASHBOARD = "dashboard"
 ANALYTICS = "analytics"
+INSIGHTS = "insights"
 
 # What each section will contain, shown until the real view is built.
 SECTION_DESCRIPTIONS: dict[str, tuple[str, str]] = {
@@ -67,6 +69,8 @@ class MainView(QWidget):
         self.budgets_view = BudgetsView(api_client)
         self.subscriptions_view = SubscriptionsView(api_client)
         self.analytics_view = AnalyticsView(api_client)
+        self.insights_view = InsightsView(api_client)
+        self.insights_view.navigate_requested.connect(self.go_to)
 
         self.pages = QStackedWidget()
         self.pages.setObjectName("ContentArea")
@@ -82,6 +86,7 @@ class MainView(QWidget):
             BUDGETS: self.budgets_view,
             SUBSCRIPTIONS: self.subscriptions_view,
             ANALYTICS: self.analytics_view,
+            INSIGHTS: self.insights_view,
         }
         if key in real_views:
             return real_views[key]
@@ -128,5 +133,7 @@ class MainView(QWidget):
             self.subscriptions_view.load_once(self._currency)
         elif key == ANALYTICS:
             self.analytics_view.load_once(self._currency)
+        elif key == INSIGHTS:
+            self.insights_view.load_once(self._currency)
 
         self.pages.setCurrentIndex(index)

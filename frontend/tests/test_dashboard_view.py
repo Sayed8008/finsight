@@ -22,6 +22,7 @@ from client.api.dto import (
     Category,
     CategoryShare,
     Dashboard,
+    Insight,
     PeriodTotals,
     Subscription,
     SubscriptionSummary,
@@ -89,6 +90,8 @@ def dashboard(
     active: int = 0,
     start: str = "2026-03-01",
     end: str = "2026-03-31",
+    insights: tuple[Insight, ...] = (),
+    needs_attention: int = 0,
 ) -> Dashboard:
     money_in, money_out = Decimal(income), Decimal(expense)
     return Dashboard(
@@ -111,7 +114,17 @@ def dashboard(
             yearly_total=Decimal("5988.00") if active else Decimal("0.00"),
             next_renewal=upcoming,
         ),
+        insights=insights,
+        needs_attention=needs_attention,
     )
+
+
+def insight(
+    title: str = "Food budget exceeded",
+    detail: str = "You have spent 12,000.00 against a 10,000.00 budget.",
+    severity: str = "critical",
+) -> Insight:
+    return Insight(code="budget_exceeded", severity=severity, title=title, detail=detail)
 
 
 class StubApi:
@@ -396,38 +409,48 @@ def test_income_and_expense_are_signed_in_the_recent_list(qtbot) -> None:
 # ─── The attention bar ────────────────────────────────────────────────────
 
 
-def test_budgets_needing_attention_are_named(qtbot) -> None:
-    widget = DashboardView(StubApi(dashboard(budgets=BudgetHealth(5, 3, 1, 1, 2))))
+def test_the_attention_bar_renders_the_top_insight(qtbot) -> None:
+    """It used to work out its own line from budget counts and the next
+    renewal — a second place deciding what matters, free to disagree with the
+    insights screen. It now shows what the server already ranked (ADR-008)."""
+    widget = DashboardView(StubApi(dashboard(insights=(insight(),), needs_attention=1)))
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
 
-    assert "2 of 5 budgets need attention" in widget.attention_label.text()
+    assert "Food budget exceeded" in widget.attention_label.text()
+    assert "12,000.00" in widget.attention_label.text()
     assert widget.attention_bar.property("state") == "warning"
 
 
-def test_all_budgets_on_track_is_said_positively(qtbot) -> None:
-    widget = DashboardView(StubApi(dashboard(budgets=BudgetHealth(3, 3, 0, 0, 0))))
+def test_the_attention_bar_counts_the_rest(qtbot) -> None:
+    widget = DashboardView(
+        StubApi(
+            dashboard(
+                insights=(insight(), insight(title="Rent is up"), insight(title="Netflix renews")),
+                needs_attention=2,
+            )
+        )
+    )
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
 
-    assert "All 3 budgets on track" in widget.attention_label.text()
+    assert "2 more" in widget.attention_label.text()
+
+
+def test_good_news_only_leaves_the_bar_calm(qtbot) -> None:
+    widget = DashboardView(
+        StubApi(
+            dashboard(
+                insights=(insight(title="Food spending is down", severity="good"),),
+                needs_attention=0,
+            )
+        )
+    )
+    qtbot.addWidget(widget)
+    widget.load_once("BDT", "Sayed")
+
+    assert "Food spending is down" in widget.attention_label.text()
     assert widget.attention_bar.property("state") == "calm"
-
-
-def test_the_next_renewal_is_mentioned(qtbot) -> None:
-    widget = DashboardView(StubApi(dashboard(active=1, upcoming=subscription(days=4))))
-    qtbot.addWidget(widget)
-    widget.load_once("BDT", "Sayed")
-
-    assert "Netflix renews in 4 days" in widget.attention_label.text()
-
-
-def test_an_overdue_renewal_is_called_overdue(qtbot) -> None:
-    widget = DashboardView(StubApi(dashboard(active=1, upcoming=subscription(days=-2))))
-    qtbot.addWidget(widget)
-    widget.load_once("BDT", "Sayed")
-
-    assert "Netflix is overdue" in widget.attention_label.text()
 
 
 def test_nothing_to_report_says_so(view: DashboardView) -> None:
@@ -444,8 +467,9 @@ def test_the_dashboard_asks_the_shell_to_navigate(view: DashboardView) -> None:
 
     view.budgets_button.click()
     view.subscriptions_button.click()
+    view.insights_button.click()
 
-    assert asked == ["budgets", "subscriptions"]
+    assert asked == ["budgets", "subscriptions", "insights"]
 
 
 # ─── Failure ──────────────────────────────────────────────────────────────

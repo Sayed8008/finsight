@@ -11,6 +11,7 @@ from datetime import date as date_type
 from pydantic import BaseModel, ConfigDict
 
 from app.core.money import MoneyOut, PercentageOut
+from app.schemas.insight import InsightResponse
 from app.schemas.subscription import SubscriptionSummary
 from app.schemas.transaction import TransactionResponse
 
@@ -66,3 +67,7 @@ class DashboardResponse(BaseModel):
     recent: list[TransactionResponse]
     budgets: BudgetHealthResponse
     subscriptions: SubscriptionSummary
+    #: The same findings the insights screen shows. The dashboard renders
+    #: these; it does not decide what matters (ADR-008).
+    insights: list[InsightResponse]
+    needs_attention: int

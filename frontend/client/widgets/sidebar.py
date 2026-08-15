@@ -36,6 +36,7 @@ NAV_ITEMS: tuple[NavItem, ...] = (
     NavItem("budgets", "Budgets"),
     NavItem("subscriptions", "Subscriptions"),
     NavItem("analytics", "Analytics"),
+    NavItem("insights", "Insights"),
     NavItem("settings", "Settings"),
 )
 

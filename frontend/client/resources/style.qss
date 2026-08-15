@@ -776,6 +776,54 @@ QCheckBox::indicator:disabled {
 #ChangeMovement[tone="positive"] { color: #1a7f4b; }
 #ChangeMovement[tone="negative"] { color: #b4232c; }
 
+/* ─── Insights ──────────────────────────────────────────────────────────── */
+
+#InsightList {
+    background-color: transparent;
+}
+
+#InsightCard {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-left: 3px solid #cdd2d9;
+    border-radius: 8px;
+}
+
+/* The left edge carries severity, so a screenful is skimmable before a word
+ * of it is read. The badge repeats it in text — severity is never colour
+ * alone. */
+#InsightCard[severity="critical"] { border-left-color: #b4232c; }
+#InsightCard[severity="warning"]  { border-left-color: #d9782e; }
+#InsightCard[severity="info"]     { border-left-color: #1a56c4; }
+#InsightCard[severity="good"]     { border-left-color: #1a7f4b; }
+
+#InsightTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#InsightDetail {
+    font-size: 13px;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+#InsightBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9px;
+    background-color: #eef0f3;
+    color: #6b7480;
+}
+
+#InsightBadge[severity="critical"] { background-color: #fdeceb; color: #b4232c; }
+#InsightBadge[severity="warning"]  { background-color: #fdf0e3; color: #b8620f; }
+#InsightBadge[severity="info"]     { background-color: #eaf1fd; color: #1a56c4; }
+#InsightBadge[severity="good"]     { background-color: #e6f4ec; color: #1a7f4b; }
+
 /* ─── Dialogs ───────────────────────────────────────────────────────────── */
 
 #TransactionDialog,

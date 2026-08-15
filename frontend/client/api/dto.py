@@ -418,6 +418,72 @@ class BudgetHealth:
         )
 
 
+#: Insight severities, mirroring the server's enum. Plain strings, as with
+#: budget and subscription statuses: the client colours what it is told and
+#: decides no thresholds of its own.
+CRITICAL = "critical"
+SEVERITY_WARNING = "warning"
+INFO = "info"
+GOOD = "good"
+
+#: Display order, matching the server's. Held here only so a client-side sort
+#: cannot disagree with the order things arrived in.
+SEVERITY_ORDER = {CRITICAL: 0, SEVERITY_WARNING: 1, INFO: 2, GOOD: 3}
+
+
+@dataclass(frozen=True)
+class Insight:
+    """One finding, and the explanation for it."""
+
+    code: str
+    severity: str
+    title: str
+    detail: str
+    category_id: int | None = None
+    subscription_id: int | None = None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Insight:
+        return cls(
+            code=payload["code"],
+            severity=payload["severity"],
+            title=payload["title"],
+            detail=payload["detail"],
+            category_id=payload.get("category_id"),
+            subscription_id=payload.get("subscription_id"),
+        )
+
+    @property
+    def is_bad_news(self) -> bool:
+        return self.severity in (CRITICAL, SEVERITY_WARNING)
+
+
+@dataclass(frozen=True)
+class Insights:
+    """Everything the rules found for a period."""
+
+    period_start: date_type
+    period_end: date_type
+    items: tuple[Insight, ...]
+    needs_attention: int
+    counts: dict[str, int]
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Insights:
+        return cls(
+            period_start=date_type.fromisoformat(payload["period_start"]),
+            period_end=date_type.fromisoformat(payload["period_end"]),
+            items=tuple(Insight.from_json(row) for row in payload["insights"]),
+            needs_attention=int(payload["needs_attention"]),
+            counts={key: int(value) for key, value in payload["counts"].items()},
+        )
+
+    @classmethod
+    def empty(cls) -> Insights:
+        today = date_type.today()
+        return cls(today, today, (), 0, {})
+
+
 @dataclass(frozen=True)
 class Dashboard:
     """Everything the first screen needs, from one request."""
@@ -429,6 +495,10 @@ class Dashboard:
     recent: tuple[Transaction, ...]
     budgets: BudgetHealth
     subscriptions: SubscriptionSummary
+    #: The same findings the insights screen shows. Rendered here, not
+    #: recomputed — the dashboard decides nothing about what matters.
+    insights: tuple[Insight, ...]
+    needs_attention: int
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Dashboard:
@@ -440,6 +510,8 @@ class Dashboard:
             recent=tuple(Transaction.from_json(row) for row in payload["recent"]),
             budgets=BudgetHealth.from_json(payload["budgets"]),
             subscriptions=SubscriptionSummary.from_json(payload["subscriptions"]),
+            insights=tuple(Insight.from_json(row) for row in payload["insights"]),
+            needs_attention=int(payload["needs_attention"]),
         )
 
     @classmethod
@@ -454,6 +526,8 @@ class Dashboard:
             recent=(),
             budgets=BudgetHealth(0, 0, 0, 0, 0),
             subscriptions=SubscriptionSummary.empty(),
+            insights=(),
+            needs_attention=0,
         )
 
 

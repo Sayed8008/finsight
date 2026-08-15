@@ -212,6 +212,12 @@ class DashboardView(QWidget):
         )
         row.addWidget(self.subscriptions_button)
 
+        self.insights_button = QPushButton("See all insights")
+        self.insights_button.setObjectName("SecondaryButton")
+        self.insights_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.insights_button.clicked.connect(lambda: self.navigate_requested.emit("insights"))
+        row.addWidget(self.insights_button)
+
         self.attention_bar = panel
         return panel
 
@@ -334,27 +340,30 @@ class DashboardView(QWidget):
         return row
 
     def _render_attention(self) -> None:
-        """One line naming what needs doing, or confirming nothing does."""
-        budgets = self._dashboard.budgets
-        upcoming = self._dashboard.subscriptions.next_renewal
+        """Show the most urgent insight, or say there is nothing.
 
-        parts: list[str] = []
-        if budgets.needs_attention:
-            parts.append(
-                f"{budgets.needs_attention} of {budgets.total} budget"
-                f"{'s' if budgets.total != 1 else ''} need attention"
-            )
-        elif budgets.total:
-            parts.append(f"All {budgets.total} budgets on track")
+        This used to work out its own line from budget counts and the next
+        renewal — a second place deciding what deserves attention, free to
+        disagree with the insights screen about it. It now renders the top
+        insight the server already ranked (ADR-008), so the application has one
+        set of thresholds rather than two.
+        """
+        insights = self._dashboard.insights
+        needs = self._dashboard.needs_attention
 
-        if upcoming is not None:
-            if upcoming.is_overdue:
-                parts.append(f"{upcoming.name} is overdue")
-            else:
-                parts.append(f"{upcoming.name} renews in {upcoming.days_until_renewal} days")
+        if not insights:
+            self.attention_label.setText("Nothing needs attention")
+            self._set_attention_state("calm")
+            return
 
-        self.attention_label.setText(" · ".join(parts) if parts else "Nothing needs attention")
-        self.attention_bar.setProperty("state", "warning" if budgets.needs_attention else "calm")
+        top = insights[0]
+        extra = len(insights) - 1
+        suffix = f" · {extra} more" if extra else ""
+        self.attention_label.setText(f"{top.title} — {top.detail}{suffix}")
+        self._set_attention_state("warning" if needs else "calm")
+
+    def _set_attention_state(self, state: str) -> None:
+        self.attention_bar.setProperty("state", state)
         self.attention_bar.style().unpolish(self.attention_bar)
         self.attention_bar.style().polish(self.attention_bar)
 
