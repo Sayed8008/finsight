@@ -442,11 +442,31 @@ def test_badges_are_cleared_when_none_are_earned(panel: SavingsJourneyPanel) -> 
     assert panel.badge_titles == []
 
 
-def test_observations_are_shown_when_there_are_any(panel: SavingsJourneyPanel) -> None:
-    panel.set_journey(journey(span(3), observations=("You saved more.", "Nice streak.")))
+def test_the_panel_explains_the_badges_once_and_only_once(panel: SavingsJourneyPanel) -> None:
+    """There used to be a second muted line of "observations" saying the same
+    four things as the badge reasons — best month, saved more than last month,
+    rate moved, months in a row. Two paragraphs repeating each other read as
+    padding, and the reader has to check whether the second is saying anything
+    new. Only the badge reasons remain, and nothing else on the panel repeats
+    them.
+    """
+    panel.set_journey(
+        journey(
+            span(3),
+            badges=(SavingsBadge(code="improving", title="Improving", detail="2,000.00 more."),),
+            observations=("You saved 2,000.00 more than last month.",),
+        )
+    )
 
-    assert "You saved more." in panel.observations_text
-    assert "Nice streak." in panel.observations_text
+    from PySide6.QtWidgets import QLabel
+
+    # Not filtered by `isVisible`: the panel is not shown in a test, so every
+    # child would report hidden. Counting the labels that *carry* the text is
+    # the real question — a second one would be the duplicate line returning.
+    muted = [lab.text() for lab in panel.findChildren(QLabel) if "2,000.00 more" in lab.text()]
+
+    assert panel.badge_details_text.count("2,000.00 more.") == 1
+    assert len(muted) == 1, muted
 
 
 def test_a_failure_says_so_rather_than_claiming_no_history(

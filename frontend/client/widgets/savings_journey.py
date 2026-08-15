@@ -58,7 +58,7 @@ NO_HISTORY = "No completed months yet — the journey starts once a month finish
 
 
 class SavingsJourneyPanel(QFrame):
-    """Summary tiles, a line of monthly savings, badges and observations."""
+    """Summary tiles, a line of monthly savings, and the badges it earned."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -87,6 +87,14 @@ class SavingsJourneyPanel(QFrame):
 
         # What each badge was awarded for, in the order the pills appear.
         #
+        # This replaced a second line of "observations" that said the same
+        # things in different words — best month, saved more than last month,
+        # rate moved, months in a row. Two muted paragraphs repeating four
+        # facts read as padding, and the reader has to check whether the
+        # second one is saying something new. The badge reasons are anchored
+        # to something visible; the observations floated free, so they went.
+        # The server still returns them for any other reader.
+        #
         # The detail used to live only in a tooltip, which made a row of
         # coloured words look like decoration — the exact thing
         # `savings_rules` says a badge must not be. Hover is also no way to
@@ -99,11 +107,6 @@ class SavingsJourneyPanel(QFrame):
         self._badge_details.setVisible(False)
         box.addWidget(self._badge_details)
 
-        self._observations = QLabel("")
-        self._observations.setObjectName("SavingsObservations")
-        self._observations.setWordWrap(True)
-        self._observations.setVisible(False)
-        box.addWidget(self._observations)
 
     # ─── Construction ─────────────────────────────────────────────────────
 
@@ -171,7 +174,6 @@ class SavingsJourneyPanel(QFrame):
         self.chart.set_months(journey.months)
         self._render_tiles(journey)
         self._render_badges(journey.badges)
-        self._render_observations(journey.observations)
         self._render_subtitle(journey)
         stagger_in([self.saved_tile, self.change_tile, self.rate_tile, self.best_tile])
 
@@ -180,7 +182,6 @@ class SavingsJourneyPanel(QFrame):
         self.chart.show_failure("Could not load your savings history", message)
         self._render_tiles(SavingsJourney.empty())
         self._render_badges(())
-        self._render_observations(())
         self.subtitle.setText("")
 
     def reset(self) -> None:
@@ -299,10 +300,6 @@ class SavingsJourneyPanel(QFrame):
         )
         self._badge_details.setVisible(bool(badges))
 
-    def _render_observations(self, observations: tuple[str, ...]) -> None:
-        self._observations.setText(" · ".join(observations))
-        self._observations.setVisible(bool(observations))
-
     # ─── Formatting ───────────────────────────────────────────────────────
 
     def _money(self, value: Decimal) -> str:
@@ -329,10 +326,6 @@ class SavingsJourneyPanel(QFrame):
         to the reader.
         """
         return self._badge_details.text()
-
-    @property
-    def observations_text(self) -> str:
-        return self._observations.text()
 
     @staticmethod
     def month_label(month: SavingsMonth) -> str:
