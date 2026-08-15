@@ -455,3 +455,36 @@ ADR-022, no test of geometry or visibility would catch this.
 **Related:** ADR-012 (layout bugs are found by rendering) and ADR-022 (Qt
 stylesheet specificity). Three separate faults now, all invisible in the source
 and all obvious in a screenshot.
+
+---
+
+## ADR-025 — Billing dates are anchored, and `next_billing_date` is derived
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Every subscription occurrence is computed as `start_date + n cycles` from the
+original anchor, never by adding one cycle to the previous date. Clients never
+supply `next_billing_date`.
+
+**Why (anchoring):** month-end clamping is correct in isolation and wrong when
+applied repeatedly. Adding a month to 31 January must give 28 February, since
+31 February does not exist — but adding a month to *that* gives 28 March, and a
+subscription that bills on the last day has silently moved to the 28th for
+good. Anchoring gives 31 Jan → 28 Feb → 31 Mar → 30 Apr → 31 May: clamped where
+it must be, restored where it can be, which is what a real biller does.
+
+**Why (derived, not supplied):** accepting a next billing date alongside a start
+date and a cycle allows all three to disagree, and nothing can then say which
+was meant. It is recomputed when the anchor or the cycle changes, and advanced
+by `POST /subscriptions/{id}/renew`.
+
+**Consequence:** renewing past a subscription's own end date cancels it rather
+than scheduling a charge that will never happen.
+
+**Also decided here:** a weekly cost converts at 52 charges a year, never four
+a month. The two differ by about 8% — invisible on one row, material in a
+total — so one table holds the conversions and a test asserts that monthly × 12
+stays within rounding of yearly, since the interface shows both together.
+
+**Rejected:** storing the schedule as a list of future dates. It would need
+regenerating on every edit and would go stale exactly like a cached total
+(ADR-015).

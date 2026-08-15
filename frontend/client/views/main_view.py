@@ -15,6 +15,7 @@ from client.api.client import ApiClient
 from client.api.dto import User
 from client.views.budgets_view import BudgetsView
 from client.views.placeholder import PlaceholderView
+from client.views.subscriptions_view import SubscriptionsView
 from client.views.transactions_view import TransactionsView
 from client.widgets.sidebar import NAV_ITEMS, Sidebar
 
@@ -24,16 +25,13 @@ logger = logging.getLogger(__name__)
 #: placeholder, so adding a section to the sidebar cannot crash the shell.
 TRANSACTIONS = "transactions"
 BUDGETS = "budgets"
+SUBSCRIPTIONS = "subscriptions"
 
 # What each section will contain, shown until the real view is built.
 SECTION_DESCRIPTIONS: dict[str, tuple[str, str]] = {
     "dashboard": (
         "Dashboard",
         "Balance, monthly summary, charts and insights will appear here.",
-    ),
-    "subscriptions": (
-        "Subscriptions",
-        "Recurring payments, renewal dates and total monthly commitment.",
     ),
     "analytics": (
         "Analytics",
@@ -68,6 +66,7 @@ class MainView(QWidget):
 
         self.transactions_view = TransactionsView(api_client)
         self.budgets_view = BudgetsView(api_client)
+        self.subscriptions_view = SubscriptionsView(api_client)
 
         self.pages = QStackedWidget()
         self.pages.setObjectName("ContentArea")
@@ -80,6 +79,7 @@ class MainView(QWidget):
         real_views: dict[str, QWidget] = {
             TRANSACTIONS: self.transactions_view,
             BUDGETS: self.budgets_view,
+            SUBSCRIPTIONS: self.subscriptions_view,
         }
         if key in real_views:
             return real_views[key]
@@ -104,5 +104,7 @@ class MainView(QWidget):
             self.transactions_view.load_once(self._currency)
         elif key == BUDGETS:
             self.budgets_view.load_once(self._currency)
+        elif key == SUBSCRIPTIONS:
+            self.subscriptions_view.load_once(self._currency)
 
         self.pages.setCurrentIndex(index)

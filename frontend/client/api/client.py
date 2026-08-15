@@ -16,7 +16,16 @@ from typing import Any
 
 import httpx2
 
-from client.api.dto import Budget, Category, Token, Transaction, TransactionPage, User
+from client.api.dto import (
+    Budget,
+    Category,
+    Subscription,
+    SubscriptionSummary,
+    Token,
+    Transaction,
+    TransactionPage,
+    User,
+)
 from client.core.config import ClientConfig
 
 logger = logging.getLogger(__name__)
@@ -284,6 +293,52 @@ class ApiClient:
 
     def delete_budget(self, budget_id: int) -> None:
         self._request("DELETE", f"{self._v1}/budgets/{budget_id}")
+
+    # ─── Subscriptions ────────────────────────────────────────────────────
+    def subscriptions(
+        self,
+        *,
+        status: str | None = None,
+        category_id: int | None = None,
+        due_within_days: int | None = None,
+    ) -> list[Subscription]:
+        """Subscriptions with their costs and renewal timing already worked out."""
+        payload = self._request(
+            "GET",
+            f"{self._v1}/subscriptions",
+            params=_without_none(
+                {
+                    "subscription_status": status,
+                    "category_id": category_id,
+                    "due_within_days": due_within_days,
+                }
+            ),
+        )
+        return [Subscription.from_json(item) for item in payload]
+
+    def subscription_summary(self) -> SubscriptionSummary:
+        """Monthly and yearly commitment, and what renews next."""
+        return SubscriptionSummary.from_json(
+            self._request("GET", f"{self._v1}/subscriptions/summary")
+        )
+
+    def create_subscription(self, **fields: Any) -> Subscription:
+        payload = self._request("POST", f"{self._v1}/subscriptions", json=fields)
+        return Subscription.from_json(payload)
+
+    def update_subscription(self, subscription_id: int, **changes: Any) -> Subscription:
+        payload = self._request(
+            "PATCH", f"{self._v1}/subscriptions/{subscription_id}", json=changes
+        )
+        return Subscription.from_json(payload)
+
+    def renew_subscription(self, subscription_id: int) -> Subscription:
+        """Record that the charge was taken and move to the next billing date."""
+        payload = self._request("POST", f"{self._v1}/subscriptions/{subscription_id}/renew")
+        return Subscription.from_json(payload)
+
+    def delete_subscription(self, subscription_id: int) -> None:
+        self._request("DELETE", f"{self._v1}/subscriptions/{subscription_id}")
 
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:

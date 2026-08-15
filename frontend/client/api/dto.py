@@ -216,3 +216,106 @@ class Budget:
     def overspend(self) -> Decimal:
         """How far past the limit, as a positive number. Zero if within it."""
         return -self.remaining if self.is_overspent else Decimal("0.00")
+
+
+#: Subscription statuses, mirroring the server's enum. Plain strings, for the
+#: same reason budget statuses are.
+ACTIVE = "active"
+PAUSED = "paused"
+CANCELLED = "cancelled"
+
+#: How each billing cycle reads in the interface.
+CYCLE_LABELS = {
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "quarterly": "Quarterly",
+    "yearly": "Yearly",
+}
+
+
+@dataclass(frozen=True)
+class Subscription:
+    """A recurring payment being tracked.
+
+    `category` is optional here, unlike on a transaction: a subscription
+    detected from transaction history may not be categorised yet.
+    """
+
+    id: int
+    name: str
+    amount: Decimal
+    billing_cycle: str
+    status: str
+    start_date: date_type
+    next_billing_date: date_type
+    end_date: date_type | None
+    category: Category | None
+    payment_method: str | None
+    notes: str | None
+    monthly_cost: Decimal
+    yearly_cost: Decimal
+    days_until_renewal: int
+    is_due_soon: bool
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Subscription:
+        category = payload.get("category")
+        end_date = payload.get("end_date")
+        return cls(
+            id=int(payload["id"]),
+            name=payload["name"],
+            amount=Decimal(payload["amount"]),
+            billing_cycle=payload["billing_cycle"],
+            status=payload["status"],
+            start_date=date_type.fromisoformat(payload["start_date"]),
+            next_billing_date=date_type.fromisoformat(payload["next_billing_date"]),
+            end_date=date_type.fromisoformat(end_date) if end_date else None,
+            category=Category.from_json(category) if category else None,
+            payment_method=payload.get("payment_method"),
+            notes=payload.get("notes"),
+            monthly_cost=Decimal(payload["monthly_cost"]),
+            yearly_cost=Decimal(payload["yearly_cost"]),
+            days_until_renewal=int(payload["days_until_renewal"]),
+            is_due_soon=bool(payload["is_due_soon"]),
+        )
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == ACTIVE
+
+    @property
+    def is_overdue(self) -> bool:
+        """Active, and its renewal date has already passed."""
+        return self.is_active and self.days_until_renewal < 0
+
+    @property
+    def cycle_label(self) -> str:
+        return CYCLE_LABELS.get(self.billing_cycle, self.billing_cycle.title())
+
+
+@dataclass(frozen=True)
+class SubscriptionSummary:
+    """What the user is committed to, across active subscriptions."""
+
+    active_count: int
+    paused_count: int
+    cancelled_count: int
+    monthly_total: Decimal
+    yearly_total: Decimal
+    next_renewal: Subscription | None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> SubscriptionSummary:
+        upcoming = payload.get("next_renewal")
+        return cls(
+            active_count=int(payload["active_count"]),
+            paused_count=int(payload["paused_count"]),
+            cancelled_count=int(payload["cancelled_count"]),
+            monthly_total=Decimal(payload["monthly_total"]),
+            yearly_total=Decimal(payload["yearly_total"]),
+            next_renewal=Subscription.from_json(upcoming) if upcoming else None,
+        )
+
+    @classmethod
+    def empty(cls) -> SubscriptionSummary:
+        return cls(0, 0, 0, Decimal("0.00"), Decimal("0.00"), None)

@@ -479,6 +479,66 @@ QWidget {
 #BudgetBar[status="warning"]::chunk  { background-color: #d9782e; }
 #BudgetBar[status="exceeded"]::chunk { background-color: #b4232c; }
 
+/* ─── Subscriptions ─────────────────────────────────────────────────────── */
+
+#SubscriptionCard {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-left: 3px solid #cdd2d9;
+    border-radius: 8px;
+}
+
+/* The left edge carries the state, as on a budget card. "Overdue" is not a
+ * stored status — it is an active subscription whose date has passed, which
+ * means either a charge went unnoticed or the record needs updating. */
+#SubscriptionCard[state="active"]    { border-left-color: #1a7f4b; }
+#SubscriptionCard[state="overdue"]   { border-left-color: #b4232c; }
+#SubscriptionCard[state="paused"]    { border-left-color: #d9782e; }
+#SubscriptionCard[state="cancelled"] { border-left-color: #cdd2d9; }
+
+#SubscriptionName {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#SubscriptionCost,
+#SubscriptionCategory {
+    font-size: 13px;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+#SubscriptionCategory {
+    color: #6b7480;
+}
+
+#SubscriptionRenewal {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+#SubscriptionRenewal[state="overdue"] { color: #b4232c; }
+#SubscriptionRenewal[state="paused"]  { color: #b8620f; }
+#SubscriptionRenewal[state="cancelled"] { color: #8b939c; }
+
+#SubscriptionBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9px;
+    background-color: #eef0f3;
+    color: #6b7480;
+}
+
+#SubscriptionBadge[state="active"]    { background-color: #e6f4ec; color: #1a7f4b; }
+#SubscriptionBadge[state="overdue"]   { background-color: #fdeceb; color: #b4232c; }
+#SubscriptionBadge[state="paused"]    { background-color: #fdf0e3; color: #b8620f; }
+#SubscriptionBadge[state="cancelled"] { background-color: #eef0f3; color: #8b939c; }
+
 /* ─── Summary strip ─────────────────────────────────────────────────────── */
 
 #SummaryStrip {
@@ -553,14 +613,16 @@ QCheckBox::indicator:disabled {
 /* ─── Dialogs ───────────────────────────────────────────────────────────── */
 
 #TransactionDialog,
-#BudgetDialog {
+#BudgetDialog,
+#SubscriptionDialog {
     background-color: #ffffff;
 }
 
 /* Scoped to QLabel, never QWidget: `#Dialog QWidget` also matches every button
  * inside and outranks `#PrimaryButton`, which paints it in nothing (ADR-022). */
 #TransactionDialog QLabel,
-#BudgetDialog QLabel {
+#BudgetDialog QLabel,
+#SubscriptionDialog QLabel {
     background-color: transparent;
 }
 
