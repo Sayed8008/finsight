@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- FinSight application icon.
+
+       The same rising line the savings journey draws, on the interface's
+       primary blue. Deliberately not a coin, a wallet or a currency symbol:
+       those say "money", and half the applications in a launcher say money.
+       What this one does is show a shape over time, so the icon is that
+       shape. Legible down to 16px because it is four strokes and no text. -->
+  <rect width="256" height="256" rx="56" fill="#1a56c4"/>
+
+  <!-- Baseline: the zero the line is read against. -->
+  <path d="M52 186 H204" stroke="#7ea2e8" stroke-width="6" stroke-linecap="round" fill="none"/>
+
+  <!-- The trend itself: down once, then up. A line that only climbs is a
+       logo; one that dips first is a record of something. -->
+  <path d="M60 158 L104 172 L148 104 L196 70"
+        stroke="#ffffff" stroke-width="16" stroke-linecap="round"
+        stroke-linejoin="round" fill="none"/>
+
+  <!-- The latest point, marked as the chart marks it. -->
+  <circle cx="196" cy="70" r="16" fill="#ffffff"/>
+</svg>

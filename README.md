@@ -186,6 +186,34 @@ Either half alone: `./scripts/dev.sh backend` or `./scripts/dev.sh client`.
 - API: <http://127.0.0.1:8000>
 - Interactive API documentation: <http://127.0.0.1:8000/docs>
 
+### Installing it as a desktop application
+
+To launch FinSight from the application menu like anything else, rather than
+from a terminal:
+
+```bash
+./scripts/install-desktop-entry.sh
+```
+
+That writes a single file to `~/.local/share/applications`. Nothing goes
+system-wide and nothing needs root. Search for **FinSight** in the launcher.
+
+The menu item runs `scripts/finsight.sh`, which starts the API, waits for it to
+answer before opening the window — so the first screen is never a
+"backend offline" one that fixes itself a second later — and stops the API
+again when the window closes. If it cannot start, it says why in a dialog
+rather than on a console nobody is watching.
+
+MySQL still has to be running; on Ubuntu it starts with the machine
+(`systemctl status mysql`). The entry points at this checkout, so if you move
+the project, re-run the script.
+
+To remove it:
+
+```bash
+./scripts/install-desktop-entry.sh --uninstall
+```
+
 ### Two terminals, without the script
 
 The script is a convenience; it starts these. Run them by hand when you want
