@@ -229,6 +229,22 @@ To remove the launcher entry:
 ./scripts/install-desktop-entry.sh --uninstall
 ```
 
+### Sharing it with somebody else
+
+`packaging/` builds a copy that runs without Python, a virtual environment or a
+terminal — the API is bundled with the window and served from the same process:
+
+```bash
+.venv/bin/pip install pyinstaller
+.venv/bin/pyinstaller packaging/finsight.spec --noconfirm
+cd dist && zip -r FinSight-linux.zip FinSight
+```
+
+The recipient still needs **MySQL** and their own `.env`; see
+[`packaging/README.md`](packaging/README.md) for what to send and what never to
+send. Never include your own `.env` — it holds your `SECRET_KEY` and database
+password.
+
 ### Two terminals, without the script
 
 The script is a convenience; it starts these. Run them by hand when you want
