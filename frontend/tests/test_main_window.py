@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from client.api.client import ApiError, ApiUnavailableError
-from client.api.dto import Comparison, Dashboard, Token, Trend, User
+from client.api.dto import Comparison, Dashboard, Token, TransactionPage, Trend, User
 from client.views.auth_view import LOGIN_PAGE, REGISTER_PAGE
 from client.views.main_window import APP_PAGE, AUTH_PAGE, MainWindow
 from client.widgets.sidebar import NAV_ITEMS
@@ -66,6 +66,19 @@ class StubApi:
     def comparison(self, **kwargs) -> Comparison:
         self.calls.append("comparison")
         return Comparison.empty()
+
+    def categories(self, **kwargs) -> list:
+        """Fetched by Settings, and by every screen offering a category picker."""
+        self.calls.append("categories")
+        return []
+
+    def payment_methods(self) -> list[str]:
+        self.calls.append("payment_methods")
+        return []
+
+    def transactions(self, **kwargs):
+        self.calls.append("transactions")
+        return TransactionPage.empty(25)
 
     def dashboard(self, **kwargs) -> Dashboard:
         """Signing in lands on the dashboard, so the shell fetches it at once.
@@ -254,3 +267,42 @@ def test_backend_check_fails_gracefully_when_api_is_down(qtbot) -> None:
     qtbot.addWidget(window)
 
     assert window.check_backend() is False
+
+
+# ─── Settings reaches the rest of the application ─────────────────────────
+
+
+def test_settings_is_a_real_section_now(window: MainWindow) -> None:
+    """The last placeholder in the sidebar."""
+    sign_in(window)
+    window.main_view.go_to("settings")
+
+    from client.views.settings_view import SettingsView
+
+    assert isinstance(window.main_view.pages.currentWidget(), SettingsView)
+
+
+def test_changing_a_category_refreshes_the_pickers_that_are_open(window: MainWindow) -> None:
+    """Each of those screens fetches its categories once, when first opened.
+    Without this, a category added in Settings would be missing from the
+    transactions filter until the application was restarted."""
+    sign_in(window)
+    window.main_view.go_to("transactions")
+    api = window.main_view._api
+    api.calls.clear()
+
+    window.main_view.settings_view.categories_changed.emit()
+
+    assert "categories" in api.calls
+
+
+def test_a_screen_nobody_has_opened_is_not_woken_up(window: MainWindow) -> None:
+    """Refreshing a picker on a section the user has never visited would make a
+    request for a screen they may never look at."""
+    sign_in(window)
+    api = window.main_view._api
+    api.calls.clear()
+
+    window.main_view.settings_view.categories_changed.emit()
+
+    assert api.calls == []

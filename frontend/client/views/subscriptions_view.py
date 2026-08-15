@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiClient, ApiError
 from client.api.dto import ACTIVE, CANCELLED, PAUSED, Category, Subscription, SubscriptionSummary
+from client.widgets.busy import working
 from client.widgets.detection_dialog import DetectionDialog
 from client.widgets.forms import LabelledWidget, MessageBanner
 from client.widgets.subscription_card import SubscriptionCard
@@ -225,6 +226,16 @@ class SubscriptionsView(QWidget):
         self.refresh_categories()
         self.reload()
 
+    @property
+    def is_loaded(self) -> bool:
+        """Whether this section has fetched anything yet.
+
+        Asked by the shell before refreshing category pickers: a section nobody
+        has opened has no picker to refresh, and forcing one would make a
+        request for a screen the user may never look at.
+        """
+        return self._loaded
+
     def refresh_categories(self) -> None:
         """Load categories and payment methods once, for the filter and dialog."""
         try:
@@ -355,7 +366,12 @@ class SubscriptionsView(QWidget):
         inside the dialog, and only when the user asks for it (ADR-007).
         """
         try:
-            detection = self._api.detect_subscriptions()
+            with working(
+                banner=self.banner,
+                message="Searching your transaction history…",
+                disable=(self.detect_button, self.add_button),
+            ):
+                detection = self._api.detect_subscriptions()
         except ApiError as exc:
             self._show_error(exc)
             return

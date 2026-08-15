@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 from client.api.client import ApiClient, ApiError
 from client.api.dto import EXPENSE, INCOME, Category, Transaction, TransactionPage
 from client.models.transaction_table import COLUMNS, DESCRIPTION, TransactionTableModel
+from client.widgets.busy import working
 from client.widgets.forms import LabelledWidget, MessageBanner
 from client.widgets.import_dialog import ImportDialog
 from client.widgets.transaction_dialog import TransactionDialog
@@ -351,6 +352,16 @@ class TransactionsView(QWidget):
         self.refresh_categories()
         self.reload()
 
+    @property
+    def is_loaded(self) -> bool:
+        """Whether this section has fetched anything yet.
+
+        Asked by the shell before refreshing category pickers: a section nobody
+        has opened has no picker to refresh, and forcing one would make a
+        request for a screen the user may never look at.
+        """
+        return self._loaded
+
     def refresh_categories(self) -> None:
         """Load the category list once, for the filter and both dialogs.
 
@@ -641,7 +652,12 @@ class TransactionsView(QWidget):
         file as UTF-8.
         """
         try:
-            document = self._api.export_transactions(**self.filter_arguments())
+            with working(
+                banner=self.banner,
+                message="Building the file…",
+                disable=(self.export_button, self.import_button),
+            ):
+                document = self._api.export_transactions(**self.filter_arguments())
         except ApiError as exc:
             self._show_error(exc)
             return

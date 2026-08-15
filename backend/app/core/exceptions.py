@@ -18,6 +18,10 @@ class AppError(Exception):
 
     `status_code` is the HTTP status the API layer will use. It lives here
     rather than in each route so that one mapping serves every endpoint.
+
+    `headers` is for the rare status whose meaning is incomplete without one —
+    a 429 without `Retry-After` tells a client to back off for an unknown
+    length of time, which it can only answer by guessing.
     """
 
     status_code: int = 400
@@ -25,6 +29,7 @@ class AppError(Exception):
 
     def __init__(self, message: str | None = None) -> None:
         self.message = message or self.__class__.message
+        self.headers: dict[str, str] = {}
         super().__init__(self.message)
 
 
@@ -80,3 +85,24 @@ class PermissionDenied(AppError):
 
     status_code = 403
     message = "You do not have permission to do that."
+
+
+class TooManyAttempts(AppError):
+    """The caller has been refused for making too many attempts too quickly.
+
+    Says how long to wait, in the message and in `Retry-After`. Deliberately
+    identical whether or not the email exists, for the same reason failed
+    logins are (ADR-018) — a throttle that only fires for real accounts is a
+    way of finding out which accounts are real.
+    """
+
+    status_code = 429
+    message = "Too many attempts. Please wait a moment and try again."
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        wait = max(1, retry_after_seconds)
+        minutes, seconds = divmod(wait, 60)
+        spoken = f"{minutes} minute{'s' if minutes != 1 else ''}" if minutes else f"{seconds}s"
+        super().__init__(f"Too many attempts. Please try again in about {spoken}.")
+        self.retry_after_seconds = wait
+        self.headers = {"Retry-After": str(wait)}

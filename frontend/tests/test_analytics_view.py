@@ -417,3 +417,119 @@ def test_two_failures_are_not_repeated_word_for_word(qtbot) -> None:
     widget.load_once("BDT")
 
     assert widget.banner.text().count("Cannot reach") == 1
+
+
+# ─── Failure is not emptiness ─────────────────────────────────────────────
+#
+# Found by auditing the empty states rather than by a test failing. Both panels
+# had one message for "your account has nothing" and used it for "we could not
+# fetch anything", which reads as an empty account to the one person who cannot
+# tell the difference.
+
+
+class BothFailingApi(StubApi):
+    def trend(self, **kwargs: Any) -> Trend:
+        raise ApiError("Cannot reach the FinSight backend. Is it running?")
+
+    def comparison(self, **kwargs: Any) -> Comparison:
+        raise ApiError("Cannot reach the FinSight backend. Is it running?")
+
+
+def test_a_failed_trend_does_not_claim_there_was_no_activity(qtbot) -> None:
+    """"No activity in this span" is a claim about the account. When the
+    request failed, it is a false one — and it is the sentence being read,
+    since the banner is elsewhere on the screen."""
+    widget = AnalyticsView(BothFailingApi())
+    qtbot.addWidget(widget)
+    widget.load_once("BDT")
+
+    assert widget.trend_chart.currentIndex() == EMPTY_PAGE
+    assert widget.trend_chart.empty_title.text() == "Could not load the trend"
+    assert "Cannot reach" in widget.trend_chart.empty_message.text()
+
+
+def test_a_failed_comparison_does_not_claim_there_was_nothing_to_compare(qtbot) -> None:
+    widget = AnalyticsView(BothFailingApi())
+    qtbot.addWidget(widget)
+    widget.load_once("BDT")
+
+    assert "Could not load the comparison" in widget.comparison_empty.text()
+
+
+def test_a_genuinely_empty_account_still_says_so(qtbot) -> None:
+    """The other half of the same fix: the failure wording must not leak into
+    the ordinary empty state."""
+    widget = AnalyticsView(StubApi(trend_payload=trend((), has_activity=False)))
+    qtbot.addWidget(widget)
+    widget.load_once("BDT")
+
+    assert widget.trend_chart.empty_title.text() == "No activity in this span"
+    assert widget.comparison_empty.text() == "Nothing to compare yet."
+
+
+def test_recovering_restores_the_ordinary_wording(qtbot) -> None:
+    """A failure followed by a success must not leave the failure on screen."""
+    api = BothFailingApi()
+    widget = AnalyticsView(api)
+    qtbot.addWidget(widget)
+    widget.load_once("BDT")
+
+    widget._api = StubApi(trend_payload=trend((), has_activity=False))
+    widget.reload_trend()
+    widget.reload_comparison()
+
+    assert widget.trend_chart.empty_title.text() == "No activity in this span"
+    assert widget.comparison_empty.text() == "Nothing to compare yet."
+
+
+# ─── Tooltips ─────────────────────────────────────────────────────────────
+#
+# The wording is checked directly rather than by synthesising mouse movement
+# over a chart: the sentence is the part that can be wrong, and hovering is
+# Qt's job.
+
+
+def test_a_bar_names_its_month_and_its_figure(qtbot) -> None:
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+    chart.set_currency("BDT")
+    chart.set_months((month(2026, 2, "4000.00", "2500.00"),))
+
+    assert chart.tooltip_for(0, "Income") == "February 2026 · income 4,000.00 BDT"
+    assert chart.tooltip_for(0, "Expense") == "February 2026 · expense 2,500.00 BDT"
+
+
+def test_a_tooltip_for_a_bar_that_is_not_there_is_empty(qtbot) -> None:
+    """Qt can emit a hover for an index outside the current data during a
+    redraw, and an IndexError inside a signal handler is a crash."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+    chart.set_months((month(2026, 2, "1.00", "1.00"),))
+
+    assert chart.tooltip_for(9, "Income") == ""
+    assert chart.tooltip_for(-1, "Income") == ""
+
+
+def test_tooltips_follow_a_redraw(qtbot) -> None:
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+    chart.set_months((month(2026, 2, "1.00", "1.00"),))
+    chart.set_months((month(2026, 7, "9.00", "9.00"),))
+
+    assert "July 2026" in chart.tooltip_for(0, "Income")
+
+
+def test_a_failed_load_leaves_no_stale_tooltips(qtbot) -> None:
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+    chart.set_months((month(2026, 2, "1.00", "1.00"),))
+
+    chart.show_failure("Cannot reach the FinSight backend.")
+
+    assert chart.tooltip_for(0, "Income") == ""
+
+
+def test_the_chart_is_told_the_currency(view: AnalyticsView) -> None:
+    view.trend_chart.set_months((month(2026, 2, "10.00", "5.00"),))
+
+    assert view.trend_chart.tooltip_for(0, "Income").endswith("BDT")

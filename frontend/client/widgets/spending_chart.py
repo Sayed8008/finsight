@@ -31,8 +31,8 @@ from PySide6.QtCharts import (
     QValueAxis,
 )
 from PySide6.QtCore import QMargins, Qt
-from PySide6.QtGui import QColor, QFont, QPainter
-from PySide6.QtWidgets import QLabel, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QCursor, QFont, QPainter
+from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import CategoryShare
 
@@ -57,6 +57,9 @@ class SpendingChart(QStackedWidget):
 
         self._currency = ""
         self._shares: tuple[CategoryShare, ...] = ()
+        #: The shares in the order they are drawn — reversed, so the largest is
+        #: at the top. A hover index refers to this, not to `_shares`.
+        self._plotted: tuple[CategoryShare, ...] = ()
 
         self.chart = QChart()
         self.chart.legend().setVisible(False)  # one series; the title names it
@@ -132,7 +135,14 @@ class SpendingChart(QStackedWidget):
             bars.append(float(share.total))
         bars.setColor(BAR_COLOUR)
         series.append(bars)
+        # The axis label carries the name and the share; the exact amount is a
+        # hover away. Printing it on every bar would crowd the one thing this
+        # chart exists to make easy, which is comparing lengths.
+        series.hovered.connect(self._on_hover)
         self.chart.addSeries(series)
+        # Reversed for display (largest at the top), so the hover index has to
+        # be mapped back to the original order rather than used directly.
+        self._plotted = tuple(ordered)
 
         categories = QBarCategoryAxis()
         categories.append([self._axis_label(share) for share in ordered])
@@ -167,6 +177,29 @@ class SpendingChart(QStackedWidget):
         """A little headroom above the largest bar, never a zero-width axis."""
         largest = max((share.total for share in shares), default=Decimal("0"))
         return float(largest) * 1.1 if largest > 0 else 1.0
+
+    # ─── Hovering ─────────────────────────────────────────────────────────
+
+    def _on_hover(self, entered: bool, index: int) -> None:
+        if not entered:
+            QToolTip.hideText()
+            return
+        QToolTip.showText(QCursor.pos(), self.tooltip_for(index))
+
+    def tooltip_for(self, index: int) -> str:
+        """The sentence a hovered bar shows.
+
+        Indexed against the *plotted* order, which is reversed so the largest
+        sits at the top. Reading `self._shares[index]` instead would name the
+        wrong category on every bar but the middle one — the sort of mistake
+        that looks right until somebody checks a number.
+        """
+        if not 0 <= index < len(self._plotted):
+            return ""
+
+        share = self._plotted[index]
+        figure = f"{share.total:,.2f} {self._currency}".strip()
+        return f"{share.name} · {figure} · {share.percentage:.0f}% of spending"
 
     # ─── For tests ────────────────────────────────────────────────────────
 

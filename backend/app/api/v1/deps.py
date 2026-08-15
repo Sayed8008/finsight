@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.exceptions import AuthenticationFailed, InactiveAccount
+from app.core.rate_limit import SlidingWindowLimiter
 from app.core.security import TokenError, decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -39,9 +40,37 @@ def get_settings_from_app(request: Request) -> Settings:
     return request.app.state.settings
 
 
+def get_client_key(request: Request) -> str:
+    """Who is making this request, for rate-limiting purposes.
+
+    The client's address, and nothing else. Notably *not* `X-Forwarded-For`:
+    that header is set by the caller, so trusting it turns a rate limit into a
+    suggestion — anyone refused would simply send a different value. Behind a
+    real proxy this would have to read the header *and* trust only the proxy's
+    own address, which is a deployment decision this application does not yet
+    have to make.
+
+    Falls back to a single shared bucket when there is no address at all, as
+    happens with an in-process test transport. Sharing one bucket is the safe
+    direction: it throttles more, never less.
+    """
+    return request.client.host if request.client else "unknown"
+
+
+def get_login_limiter(request: Request) -> SlidingWindowLimiter:
+    return request.app.state.login_limiter
+
+
+def get_register_limiter(request: Request) -> SlidingWindowLimiter:
+    return request.app.state.register_limiter
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings_from_app)]
 SessionDep = Annotated[Session, Depends(get_db)]
 CredentialsDep = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)]
+ClientKey = Annotated[str, Depends(get_client_key)]
+LoginLimiter = Annotated[SlidingWindowLimiter, Depends(get_login_limiter)]
+RegisterLimiter = Annotated[SlidingWindowLimiter, Depends(get_register_limiter)]
 
 
 def get_current_user(

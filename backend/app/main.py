@@ -17,6 +17,7 @@ from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.error_handlers import register_error_handlers
 from app.core.logging import configure_logging
+from app.core.rate_limit import SlidingWindowLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+
+    # Held on the application rather than in a module-level global, for the
+    # same reason the app itself is built by a factory: one test's attempts
+    # must not count towards another's. It is in-process memory, so it is also
+    # per-process — with more than one worker each would keep its own tally,
+    # and a shared store would be needed. Recorded in ADR-036 rather than
+    # pretended away.
+    app.state.login_limiter = SlidingWindowLimiter(
+        limit=settings.login_max_attempts,
+        window_seconds=settings.login_window_seconds,
+    )
+    app.state.register_limiter = SlidingWindowLimiter(
+        limit=settings.register_max_attempts,
+        window_seconds=settings.register_window_seconds,
+    )
 
     # The desktop client is not a browser and is unaffected by CORS. This is
     # kept narrow deliberately, so that a future web client has to be added

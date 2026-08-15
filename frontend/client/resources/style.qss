@@ -292,6 +292,27 @@ QWidget {
     width: 18px;
 }
 
+/* The arrow has to be drawn, or there is none. Qt switches a widget to
+ * stylesheet rendering as soon as any rule matches it and then draws only what
+ * the sheet describes — so styling the box and its drop-down area, but not the
+ * arrow inside it, left every combo box and date field in the application
+ * looking like a read-only text box. Found by rendering the category dialog
+ * and noticing its "Kind" field did not look like a chooser (ADR-012); the
+ * same defect was on every filter bar, in plain sight since Phase 4.
+ *
+ * An image rather than a stylesheet trick. The tempting version — a zero-sized
+ * box with transparent side borders and one solid edge — is a *browser* CSS
+ * technique; Qt clamps the sub-control and draws a small rectangle instead,
+ * which was tried and looked worse than nothing. `%RESOURCES%` is substituted
+ * when the sheet is loaded, since a stylesheet URL is otherwise resolved
+ * against the working directory. */
+#FieldSelect::down-arrow {
+    image: url("%RESOURCES%/chevron-down.svg");
+    width: 10px;
+    height: 10px;
+    margin-right: 7px;
+}
+
 #FieldSelect QAbstractItemView {
     border: 1px solid #cdd2d9;
     background-color: #ffffff;
@@ -878,6 +899,93 @@ QCheckBox::indicator:disabled {
 #CandidateBadge[confidence="medium"] { background-color: #fdf0e3; color: #b8620f; }
 #CandidateBadge[confidence="low"]    { background-color: #eef0f3; color: #6b7480; }
 
+/* ─── Settings ──────────────────────────────────────────────────────────── */
+
+#CategoryList {
+    background-color: transparent;
+}
+
+#CategoryRow {
+    background-color: transparent;
+    border-bottom: 1px solid #f0f2f5;
+}
+
+#CategoryGroup {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7480;
+    background-color: transparent;
+    padding: 12px 0 4px 0;
+}
+
+#CategoryName {
+    font-size: 14px;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+/* A retired category is dimmed rather than hidden. Hiding it would make
+ * restoring one impossible, and there is no delete to fall back on (ADR-020).
+ * The badge repeats it in words — the dimming alone is not the signal. */
+#CategoryName[retired="true"] {
+    color: #8b939c;
+}
+
+#CategoryBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9px;
+    background-color: #eef0f3;
+    color: #6b7480;
+}
+
+#SettingsCaption {
+    font-size: 13px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+#SettingsValue {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#SettingsNote {
+    font-size: 12px;
+    color: #8b939c;
+    background-color: transparent;
+    padding-top: 6px;
+}
+
+/* A value the user cannot change, shown where a field would be. Styled like a
+ * field's text but without a box, so it does not read as an input that has
+ * stopped working. */
+#FieldStatic {
+    font-size: 14px;
+    color: #4a5259;
+    background-color: transparent;
+    padding: 9px 0;
+}
+
+/* The colour picker in the category dialog. Only the *selected* swatch is
+ * given a border, and the fill comes from the widget's own stylesheet because
+ * the colour is data — no rule here can know which colour a swatch holds. */
+#ColourSwatch {
+    border: 2px solid transparent;
+    border-radius: 13px;
+}
+
+#ColourSwatch:hover {
+    border-color: #b3bac3;
+}
+
+#ColourSwatch:checked {
+    border-color: #0f1419;
+}
+
 /* ─── Import report ─────────────────────────────────────────────────────── */
 
 #ReportCard {
@@ -976,7 +1084,8 @@ QCheckBox::indicator:disabled {
 #BudgetDialog,
 #SubscriptionDialog,
 #DetectionDialog,
-#ImportDialog {
+#ImportDialog,
+#CategoryDialog {
     background-color: #ffffff;
 }
 
@@ -986,7 +1095,8 @@ QCheckBox::indicator:disabled {
 #BudgetDialog QLabel,
 #SubscriptionDialog QLabel,
 #DetectionDialog QLabel,
-#ImportDialog QLabel {
+#ImportDialog QLabel,
+#CategoryDialog QLabel {
     background-color: transparent;
 }
 

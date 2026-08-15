@@ -3,7 +3,7 @@
 Where the project stands, and what comes next. Updated at the end of each
 phase.
 
-**Last updated:** 2026-08-15 · **Current state:** Phase 10 complete
+**Last updated:** 2026-08-15 · **Current state:** Phase 11 complete
 
 ---
 
@@ -20,7 +20,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1043 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1125 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -43,8 +43,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1043 passed
 | 9 | Insights: rule engine, severity, explanations | ✅ done |
 | 9.5 | **Subscription auto-detection** from transaction history | ✅ done |
 | 10 | CSV import (preview then commit) and export | ✅ done |
-| 11 | Polish: error/empty/loading states, logging, theming | ⬜ next |
-| 12 | Packaging, README, screenshots, demo script | ⬜ |
+| 11 | Polish: Settings, rate limiting, loading and empty states, tooltips | ✅ done |
+| 12 | Packaging, README, screenshots, demo script | ⬜ next |
 
 Testing is not a phase. Tests are written within each phase, and every phase
 ends with a green run.
@@ -116,6 +116,9 @@ with sidebar navigation. Six real sections:
   what moved against the previous period.
 - **Insights** — one card per finding, severity in colour and in words, each
   with the explanation the rule wrote and a link to the screen it concerns.
+- **Settings** — the account, and every category grouped by direction, with
+  add, rename, recolour, retire and restore. Retired categories stay visible
+  behind a toggle, because there is no delete to fall back on (ADR-020).
 
 The Subscriptions screen also has **Find subscriptions**, which searches
 transaction history for recurring charges and reviews the candidates one at a
@@ -127,69 +130,82 @@ own button disabled until that has happened — changing any option puts it back
 to disabled and marks the report out of date, because a preview describes a file
 read one particular way (ADR-033).
 
-Only **Settings** is still a placeholder.
+There are no placeholder sections left. Changing a category in Settings
+refreshes the pickers on every screen that is already open (ADR-037), and the
+three requests that can take real time — import, export, detection — say so
+before they block, since every request in this client is synchronous (ADR-038).
 
-**Tests** — 1043 passing: security, money, budget-arithmetic, billing-cycle,
-recurrence and CSV-format unit tests; model/constraint and repository tests
-against real MySQL; API tests for every feature area; and GUI tests via
-pytest-qt, including pixel checks on things no geometry assertion can catch.
+**Tests** — 1125 passing: security, money, budget-arithmetic, billing-cycle,
+recurrence, CSV-format and rate-limit unit tests; model/constraint and
+repository tests against real MySQL; API tests for every feature area; and GUI
+tests via pytest-qt, including pixel checks on things no geometry assertion can
+catch.
 
 ---
 
-## Next: Phase 11 — Polish
+## Next: Phase 12 — Packaging, README, screenshots, demo script
 
-The features are done. What is left is everything the demo will be judged on
-that is not a feature: the states a screen is in when it is not showing data,
-the one section that is still a placeholder, and the details that have been
-listed as known limitations for nine phases.
+The last phase, and the only one whose audience is a reader rather than a user.
+Everything works; what is missing is the ability for somebody who has never seen
+this repository to run it, and for somebody who will never run it to understand
+what it does.
 
-1. **Settings, which is still a placeholder.** The category endpoints exist and
-   are tested; there is no screen. It is the last inert item in the sidebar and
-   the most visible gap.
-2. **Loading states.** Every request in this client is synchronous, so a slow
-   one freezes the window with no indication why. Nothing is perceptible against
-   localhost — but export and import are the first requests that can take real
-   time, because they are the first bounded by file size rather than by page
-   size.
-3. **Error and empty states, audited rather than assumed.** Most screens have
-   them. Whether every screen has a *distinct* one for "nothing yet" and
-   "nothing matches these filters" has not been checked in one pass.
-4. **Rate limiting on login.** Listed as a known limitation since Phase 3, and
-   the only one on the list that is a security gap rather than a scope decision.
-5. **Chart tooltips**, if there is time. The spending and trend charts have
-   none; values are readable from the axis and the labels, so this is polish in
-   the literal sense.
+1. **README.** What FinSight is, the architecture in a paragraph and a diagram,
+   how to set it up from a clean checkout, and how to run the tests. It should
+   be possible to go from `git clone` to a running application by following it,
+   on a machine with nothing but Python and MySQL.
+2. **Setup that works on a clean machine.** `scripts/setup_database.sh` and
+   `scripts/dev.sh` exist and have only ever been run here. Read them as though
+   for the first time: a script that assumes a database user already exists is
+   a script that works on exactly one computer.
+3. **Screenshots.** Six sections, the import review dialog, and the detection
+   dialog. Rendered offscreen with the same practice used all along (ADR-012),
+   with realistic figures rather than lorem ipsum.
+4. **Demo script.** The order to show things in, with the data to seed first.
+   Detection and import are the two features worth building the demo around —
+   detection is the only real algorithm here, and import is what makes a year of
+   history exist to run it against.
+5. **A seed script,** if the demo needs one. A year of plausible transactions,
+   including three genuine subscriptions and one near-miss, so detection has
+   something honest to find. It is also the fastest way to take screenshots that
+   do not look empty.
 
 **Watch out for:**
 
-- The rendering practice (ADR-012) has caught a real defect in every UI phase,
-  including this one — the stale import report went on claiming "412 of 418 rows
-  would be imported" for a reading nobody had chosen. Render the Settings screen
-  and look at it before writing a test for it.
-- A category screen has to deal with ADR-020: there is no DELETE, so the verb is
-  "deactivate", and the screen has to show deactivated categories in a way that
-  makes restoring them possible without making them look active.
-- A loading state that appears for two milliseconds is worse than none. If one
-  is added, it needs a delay before it shows.
+- The report is what this is really for. The known limitations below are written
+  to be quotable — they are the difference between "I did not do that" and "I
+  decided not to do that, and here is why".
+- Screenshots taken with an empty account make the application look unfinished.
+  Seed first.
+- The README should say what was *rejected*, not only what was built. The
+  decision log has thirty-eight entries and most readers will see only the
+  README.
 
-**Then Phase 12:** packaging, README, screenshots, demo script.
+**Deliberately out of scope:** anything that changes behaviour. Phase 12 adds no
+features, and a defect found while writing the README is a defect to record
+here, not to fix quietly at the end.
 
 ## Known limitations, recorded on purpose
 
 - Logout cannot revoke an issued token (ADR-017).
 - The access token is not persisted, so the app asks for a password on every
   launch (ADR-016).
-- No rate limiting on login. Worth adding in Phase 11 if time allows.
+- Login and registration are rate limited per client address, but the store is
+  in-process (ADR-036): with more than one worker the effective limit multiplies
+  by the worker count, and a restart forgets every tally. A shared store is the
+  fix and is a dependency this application does not otherwise need.
 - Single currency. `currency_code` is stored per user so this can change
   without a backfill.
 - The transactions table cannot be sorted by payment method: the API has no
   sort field for it, so that header is deliberately inert rather than
   appearing to work.
-- Categories can only be created and edited through the API, not the
-  interface — the Settings section is still a placeholder. The endpoints are
-  there and tested; the screen is Phase 11.
-- Transaction requests are synchronous and block the event loop. Imperceptible
-  against localhost; the point to revisit is if the backend ever moves.
+- A category can be renamed and recoloured but its type never changes, and it
+  is retired rather than deleted (ADR-020, ADR-037). Both are deliberate; both
+  will look like missing features to somebody who does not read the reasoning.
+- Requests are synchronous and block the event loop. Imperceptible against
+  localhost for anything paged; import, export and detection say they are
+  working before they block (ADR-038), which is honest rather than responsive.
+  A worker thread is the real fix and would touch every view.
 - A weekly and a monthly budget cannot both exist for one category, because
   budgets may not overlap (ADR-023). Deliberate: two budgets covering today
   would give "how much is left?" two answers.
@@ -205,8 +221,9 @@ listed as known limitations for nine phases.
 - The dashboard's attention line is computed in the view. It should become a
   rendering of insights in Phase 9 (ADR-008), not a second place that decides
   what matters.
-- The spending chart and the trend chart have no hover tooltips. Values are
-  readable from the axis and the labels; a tooltip layer is Phase 11 polish.
+- Chart tooltips appear on hover only. There is no keyboard path to the exact
+  figures, though the axis labels and printed shares mean nothing is readable
+  *only* by hovering.
 - Analytics comparison always uses the immediately preceding window. Comparing
   against the same month last year would need a second mode.
 - Insight thresholds are constants in `insight_rules.py`, not user settings.
@@ -262,3 +279,15 @@ listed as known limitations for nine phases.
 - A file previewed while another window changes the same categories could be
   refused at commit for a reason the preview did not show. The refusal is
   correct and the window is milliseconds; nothing pretends otherwise.
+- Name, email and currency are shown in Settings and cannot be changed there.
+  Changing an email means proving the new one belongs to you; changing a
+  currency means deciding what happens to every amount already recorded.
+  Neither is a field edit, and offering one as though it were would be worse
+  than not offering it.
+- The busy indicator is a wait cursor and a message, not a progress bar. Nothing
+  reports how far through an import it is, because a synchronous call cannot
+  report anything until it returns.
+- Retiring a category takes effect immediately for new records, but a budget or
+  subscription already attached to it keeps working. Deliberate — the same
+  reasoning as a transaction keeping its category — and it means a retired
+  category can still appear on the budgets screen.

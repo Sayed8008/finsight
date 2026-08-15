@@ -19,8 +19,8 @@ from decimal import Decimal
 
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QValueAxis
 from PySide6.QtCore import QMargins, Qt
-from PySide6.QtGui import QColor, QFont, QPainter
-from PySide6.QtWidgets import QLabel, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QCursor, QFont, QPainter
+from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import MonthTotals
 
@@ -35,6 +35,12 @@ LABEL_COLOUR = QColor("#6b7480")
 CHART_PAGE = 0
 EMPTY_PAGE = 1
 
+#: The empty state when the account genuinely has nothing in this span. Kept
+#: apart from the failure wording: "no activity" is a statement about the
+#: account, and showing it when the request failed is a false one.
+NO_ACTIVITY_TITLE = "No activity in this span"
+NO_ACTIVITY_MESSAGE = "Record some transactions to see the trend."
+
 
 class TrendChart(QStackedWidget):
     """Grouped monthly bars, or an empty state when there is no activity."""
@@ -42,6 +48,10 @@ class TrendChart(QStackedWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("TrendChart")
+
+        #: The months currently plotted, kept so a hovered bar can name itself.
+        self._months: tuple[MonthTotals, ...] = ()
+        self._currency = ""
 
         self.chart = QChart()
         self.chart.setBackgroundVisible(False)
@@ -73,14 +83,15 @@ class TrendChart(QStackedWidget):
         box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         box.setSpacing(6)
 
-        self.empty_title = QLabel("No activity in this span")
+        self.empty_title = QLabel(NO_ACTIVITY_TITLE)
         self.empty_title.setObjectName("EmptyTitle")
         self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         box.addWidget(self.empty_title)
 
-        self.empty_message = QLabel("Record some transactions to see the trend.")
+        self.empty_message = QLabel(NO_ACTIVITY_MESSAGE)
         self.empty_message.setObjectName("EmptyMessage")
         self.empty_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_message.setWordWrap(True)
         box.addWidget(self.empty_message)
 
         return panel
@@ -94,11 +105,27 @@ class TrendChart(QStackedWidget):
         a chart of nothing is harder to read than a sentence saying so.
         """
         if not months or not has_activity:
-            self.setCurrentIndex(EMPTY_PAGE)
+            self._show_empty(NO_ACTIVITY_TITLE, NO_ACTIVITY_MESSAGE)
             return
 
+        self._months = months
         self.setCurrentIndex(CHART_PAGE)
         self._rebuild(months)
+
+    def show_failure(self, message: str) -> None:
+        """Say the trend could not be fetched, rather than that there is none.
+
+        "No activity in this span" is a statement about the account. When the
+        request failed, it is a false one — and it is the sentence the user is
+        actually reading, since the banner is elsewhere on the screen.
+        """
+        self._months = ()
+        self._show_empty("Could not load the trend", message)
+
+    def _show_empty(self, title: str, message: str) -> None:
+        self.empty_title.setText(title)
+        self.empty_message.setText(message)
+        self.setCurrentIndex(EMPTY_PAGE)
 
     def _rebuild(self, months: tuple[MonthTotals, ...]) -> None:
         self.chart.removeAllSeries()
@@ -122,6 +149,10 @@ class TrendChart(QStackedWidget):
         series.setLabelsVisible(False)
         series.append(income)
         series.append(expense)
+        # Printing a figure on every bar would make twelve months unreadable;
+        # a tooltip puts the exact number one hover away and leaves the chart
+        # to do what it is for, which is comparing heights.
+        series.hovered.connect(self._on_hover)
         self.chart.addSeries(series)
 
         categories = QBarCategoryAxis()
@@ -160,6 +191,33 @@ class TrendChart(QStackedWidget):
     def _axis_maximum(months: tuple[MonthTotals, ...]) -> float:
         largest = max((max(month.income, month.expense) for month in months), default=Decimal("0"))
         return float(largest) * 1.1 if largest > 0 else 1.0
+
+    # ─── Hovering ─────────────────────────────────────────────────────────
+
+    def set_currency(self, currency: str) -> None:
+        """What to label a tooltip's amount with. Per user, so it arrives late."""
+        self._currency = currency
+
+    def _on_hover(self, entered: bool, index: int, bar_set: QBarSet) -> None:
+        if not entered:
+            QToolTip.hideText()
+            return
+        QToolTip.showText(QCursor.pos(), self.tooltip_for(index, bar_set.label()))
+
+    def tooltip_for(self, index: int, series_name: str) -> str:
+        """The sentence a hovered bar shows.
+
+        Built separately from the hover handler so a test can read it without
+        synthesising mouse movement over a chart — the wording is the part
+        worth checking, and the part that can be wrong.
+        """
+        if not 0 <= index < len(self._months):
+            return ""
+
+        month = self._months[index]
+        amount = month.income if series_name == "Income" else month.expense
+        figure = f"{amount:,.2f} {self._currency}".strip()
+        return f"{month.first_day:%B %Y} · {series_name.lower()} {figure}"
 
     # ─── For tests ────────────────────────────────────────────────────────
 

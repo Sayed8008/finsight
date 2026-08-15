@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -23,6 +22,7 @@ from PySide6.QtWidgets import QApplication
 
 from client.api.client import ApiError
 from client.api.dto import Category, ImportPreview, ImportResult, Transaction, TransactionPage
+from client.main import load_stylesheet
 from client.models.transaction_table import (
     AMOUNT,
     CATEGORY,
@@ -775,9 +775,7 @@ def test_the_primary_button_is_actually_painted(qtbot) -> None:
     while painted in nothing on a white dialog. Geometry and visibility tests
     all passed. Only the pixels showed it (ADR-022).
     """
-    stylesheet = (
-        Path(__file__).resolve().parents[1] / "client" / "resources" / "style.qss"
-    ).read_text()
+    stylesheet = load_stylesheet()
     app = QApplication.instance()
     previous = app.styleSheet()
     app.setStyleSheet(stylesheet)

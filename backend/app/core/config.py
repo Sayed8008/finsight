@@ -59,6 +59,31 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     jwt_algorithm: str = "HS256"
 
+    # ─── Rate limiting ────────────────────────────────────────────────────
+    # Counted per client address and only for *failed* attempts, so a user who
+    # mistypes a password twice is nowhere near the limit and an attacker can
+    # only throttle themselves. See `app/core/rate_limit.py`.
+    login_max_attempts: int = Field(
+        default=10,
+        gt=0,
+        description="Failed sign-ins allowed from one address within the window.",
+    )
+    login_window_seconds: int = Field(
+        default=300,
+        gt=0,
+        description="How long failed sign-ins are remembered for.",
+    )
+    register_max_attempts: int = Field(
+        default=5,
+        gt=0,
+        description="Accounts one address may create within the window.",
+    )
+    register_window_seconds: int = Field(
+        default=3600,
+        gt=0,
+        description="How long account creations are remembered for.",
+    )
+
     # ─── API server ───────────────────────────────────────────────────────
     api_host: str = "127.0.0.1"
     api_port: int = 8000

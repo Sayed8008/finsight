@@ -45,6 +45,12 @@ SPANS: tuple[tuple[str, int], ...] = (
 #: barely moved.
 MAX_CATEGORY_ROWS = 8
 
+#: What an empty comparison table says when the account genuinely has nothing
+#: to compare. Kept apart from the failure wording on purpose: "you have no
+#: data" and "we could not fetch your data" call for different acts from the
+#: user, and showing the first when the second happened is a quiet lie.
+NOTHING_TO_COMPARE = "Nothing to compare yet."
+
 
 class AnalyticsView(QWidget):
     """Trend over time, and this period against the one before it."""
@@ -171,9 +177,10 @@ class AnalyticsView(QWidget):
         self._rows_layout.addStretch(1)
         box.addWidget(self._rows_holder, stretch=1)
 
-        self.comparison_empty = QLabel("Nothing to compare yet.")
+        self.comparison_empty = QLabel(NOTHING_TO_COMPARE)
         self.comparison_empty.setObjectName("EmptyMessage")
         self.comparison_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.comparison_empty.setWordWrap(True)
         box.addWidget(self.comparison_empty)
 
         return panel
@@ -182,6 +189,9 @@ class AnalyticsView(QWidget):
 
     def load_once(self, currency: str = "") -> None:
         self._currency = currency
+        # The chart labels its own tooltips, and the currency is per user, so
+        # it cannot be known until somebody is signed in.
+        self.trend_chart.set_currency(currency)
         if self._loaded:
             return
         self._loaded = True
@@ -194,7 +204,10 @@ class AnalyticsView(QWidget):
             self._trend = self._api.trend(months=self.span_box.currentData())
         except ApiError as exc:
             self._record_failure("trend", exc)
-            self.trend_chart.set_months((), has_activity=False)
+            # Not `set_months((), has_activity=False)`: that shows "No activity
+            # in this span", which is a claim about the account rather than
+            # about the connection.
+            self.trend_chart.show_failure(exc.message)
             return
 
         self._record_success("trend")
@@ -205,10 +218,17 @@ class AnalyticsView(QWidget):
             self._comparison = self._api.comparison()
         except ApiError as exc:
             self._record_failure("comparison", exc)
+            # Not the "nothing to compare yet" line. The banner names the
+            # failure, but the panel is where the user is looking, and leaving
+            # it saying "nothing yet" reads as an empty account rather than an
+            # unreachable one. Found by auditing the empty states rather than
+            # by a test failing — which is what the audit was for.
             self._render_rows(())
+            self.comparison_empty.setText(f"Could not load the comparison. {exc.message}")
             return
 
         self._record_success("comparison")
+        self.comparison_empty.setText(NOTHING_TO_COMPARE)
         self._render_comparison()
 
     # ─── Rendering ────────────────────────────────────────────────────────

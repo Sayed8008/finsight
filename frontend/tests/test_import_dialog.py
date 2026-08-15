@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,6 +30,7 @@ from client.api.dto import (
     PreviewRow,
     RowProblem,
 )
+from client.main import load_stylesheet
 from client.widgets.import_dialog import ImportDialog
 
 pytestmark = pytest.mark.gui
@@ -494,9 +494,15 @@ def test_before_anything_is_checked_the_report_says_so(qtbot) -> None:
 
 
 def stylesheet() -> str:
-    return (
-        Path(__file__).resolve().parents[1] / "client" / "resources" / "style.qss"
-    ).read_text()
+    """The sheet exactly as the application loads it.
+
+    Through `load_stylesheet` rather than by reading the file, so resource
+    paths are substituted here too. Reading it raw would leave every `url(...)`
+    pointing nowhere, and a missing image in Qt fails silently — these tests
+    would show one thing and the user another, which is the failure ADR-012
+    exists to catch.
+    """
+    return load_stylesheet()
 
 
 def test_the_import_button_is_actually_painted(qtbot) -> None:

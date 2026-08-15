@@ -456,6 +456,24 @@ ADR-022, no test of geometry or visibility would catch this.
 stylesheet specificity). Three separate faults now, all invisible in the source
 and all obvious in a screenshot.
 
+**It happened a third time, in Phase 11, and had been on screen since Phase 4.**
+`#FieldSelect` styles the box and `::drop-down` styles the area the arrow sits
+in — but nothing styled `::down-arrow`, so Qt drew none. Every combo box and
+every date field in the application looked like a read-only text box, on every
+filter bar, for seven phases. Found by rendering the new category dialog and
+noticing that its "Kind" field did not look like a chooser.
+
+The fix is worth recording too, because the obvious one does not work: a
+zero-sized element with transparent side borders and one solid edge is a
+*browser* CSS triangle, and Qt clamps the sub-control and draws a small
+rectangle instead. It was tried, rendered, and looked worse than nothing. The
+arrow is an SVG, and because a stylesheet `url(...)` resolves against the
+working directory, the sheet carries a `%RESOURCES%` token that `load_stylesheet`
+substitutes. Tests now load the sheet through that function rather than reading
+the file, so what they render is what the application renders — a missing image
+in Qt fails silently, and reading the raw file would have hidden exactly this
+class of defect from the tests written to catch it.
+
 ---
 
 ## ADR-025 — Billing dates are anchored, and `next_billing_date` is derived
@@ -580,6 +598,16 @@ backend is down say it once.
 
 **Applies to:** any future screen making more than one call. The dashboard is
 unaffected, since it makes exactly one by design.
+
+**Corollary, added in Phase 11: an empty state is not a failure state.** The
+banner is not the only thing on screen. Auditing the empty states found the
+analytics trend chart saying "No activity in this span" and its comparison
+panel saying "Nothing to compare yet" when *both requests had failed* — two
+confident claims about the account, in the middle of the screen, where the user
+is actually looking. "You have no data" and "we could not fetch your data" call
+for different acts, so each panel now has separate wording and a test that the
+failure text does not leak into the ordinary empty state or survive a
+recovery.
 
 ---
 
@@ -815,3 +843,150 @@ transactions router: `/transactions/{transaction_id}` is declared there, and a
 later `/transactions/export` would be handed to that `int` path parameter and
 rejected before reaching its own handler. A separate prefix removes the trap
 instead of documenting it.
+
+---
+
+## ADR-036 — Sign-in is throttled per address, and only failures count
+**Date:** 2026-08-15 · **Status:** Accepted
+
+`POST /auth/login` refuses after ten failed attempts from one client address
+within five minutes, and answers 429 with `Retry-After`. `POST /auth/register`
+is throttled the same way at five per hour. The limiter is a sliding window
+over in-process memory.
+
+**Why at all.** Without a limit, a login form is an offline password guesser
+with a network in front of it. Argon2 (ADR-004) makes each guess expensive,
+which narrows the gap and does not close it: a few guesses a second, for a week,
+is a lot of guesses. This was on the known-limitations list from Phase 3 and was
+the only entry there that is a security gap rather than a scope decision.
+
+**Why per address and not per email.** Counting per email is the obvious design
+and it is a weapon: anyone who knows an address can fail ten logins against it
+and lock its owner out of their own account. The protection becomes the attack.
+Per address, an attacker can only throttle themselves.
+
+**Why only failures count, and a success clears the record.** The thing worth
+limiting is guessing, and a correct password is not a guess. Otherwise two
+typos this morning would still count against somebody this afternoon.
+
+**Why it is checked before the password.** A refused request then costs an
+Argon2 verification less — which is not only about load. Verification takes long
+enough to be measurable, so a throttle applied afterwards would still let an
+attacker time the response and learn from it.
+
+**Why the response says nothing useful.** The message and status are identical
+whether or not the account exists, and never say how many attempts remain. A
+count would be a progress bar; a throttle that only fired for real accounts
+would answer "does this email exist?" — the question ADR-018 exists to refuse.
+
+**Why the clock is a parameter.** `SlidingWindowLimiter` takes `now` rather than
+reading it, which is what lets every threshold and boundary be tested in a
+millisecond without `sleep`. The routes pass `monotonic()` rather than
+wall-clock time, so an NTP step or a daylight-saving change cannot hand out a
+fresh allowance or lock somebody out for an hour.
+
+**Why a sliding window rather than a fixed one.** A fixed window resets on a
+boundary, so an attacker who waits for it spends a full allowance either side
+and gets twice the intended rate — at exactly the moment a rate limit is being
+tested. A sliding window has no boundary to stand on. The cost is timestamps per
+key instead of a counter, which at a limit of ten is a few dozen floats.
+
+**Why the store is bounded.** A dictionary keyed by client address is one an
+attacker chooses the keys of; left to grow it is a memory leak with a hostile
+author. Ten thousand keys, least-recently-seen evicted, which errs in the safe
+direction — an old, quiet attacker regains an allowance while whoever is active
+stays limited.
+
+**Honest limitation, worth stating in the report:** the store is in-process.
+With more than one worker each keeps its own tally, so the effective limit
+multiplies by the worker count, and a restart forgets everything. A shared store
+is the fix and it is a dependency this application does not otherwise need. The
+limiter is held on `app.state` rather than in a module global, so tests get a
+fresh one per application and the swap would be one line.
+
+---
+
+## ADR-037 — Categories are retired in the open, and the change is announced
+**Date:** 2026-08-15 · **Status:** Accepted
+
+The Settings screen lists categories grouped by direction, with Add, Edit, and
+Retire/Restore. Retired categories stay on the screen behind a "Show retired"
+toggle, dimmed and badged. Changing any of them emits `categories_changed`,
+which the shell turns into a refresh of every screen holding a category picker.
+
+**Why the screen exists.** The category endpoints have been complete and tested
+since Phase 4, reachable only with an HTTP client. The one thing a user is most
+likely to want to change — what their spending is grouped into — was the one
+thing the interface could not do.
+
+**Why "Retire" and not "Delete".** There is no `DELETE /categories/{id}`
+(ADR-020), and there cannot usefully be one: the foreign key is `ON DELETE
+RESTRICT`, so any category ever used would refuse. The button therefore says
+what actually happens, and the confirmation says what does *not* — the history
+stays exactly where it is. A button labelled "Delete" that set a flag would read
+fine and surprise everyone later, which is the same argument ADR-020 made about
+the endpoint.
+
+**Why retired categories stay visible.** They cannot be deleted, so a screen
+that hid them would make restoring one impossible. They are dimmed *and*
+badged: the dimming alone is colour carrying meaning by itself, which this
+project does not do anywhere else either.
+
+**Why the type chooser disappears when editing.** A category's type is
+immutable, because flipping an expense category to income would silently
+invalidate every transaction filed under it. The chooser is *gone* rather than
+present and disabled — a greyed-out control invites "why can I not change this?"
+and answers nothing, while a line of text states what the category is and moves
+on.
+
+**Why the signal.** Every screen offering a category picker fetches the list
+once, when it is first opened, because the same fifteen names would otherwise be
+requested for every row on screen. That is the right call and it has exactly one
+consequence: a category created in Settings is invisible to those screens until
+told. The alternative — refetching categories on every navigation — would undo
+the reason they are cached at all. Only screens that have actually been opened
+are refreshed, so the signal cannot make a request for a section nobody has
+looked at.
+
+**Colours are picked from a fixed set,** the measured one from ADR-026, rather
+than typed as hex or chosen from a native colour wheel. A colour here always
+appears as a small swatch beside its own name, and a free choice is a free
+choice to pick two nobody can tell apart.
+
+---
+
+## ADR-038 — A blocking client says so before it blocks
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Slow requests — import, export, subscription detection — are wrapped in
+`working()`, which sets a wait cursor, puts a message in the screen's banner,
+disables the controls that triggered it, and calls `processEvents()` **once**
+before the call starts.
+
+**Why the ordering is the whole thing.** Every request in this client is
+synchronous. A blocked event loop paints nothing, so a message set immediately
+before a blocking call appears only once the call has finished — saying
+"Working…" at the exact moment the work is over. The single `processEvents()` is
+what flushes that paint while the loop is still turning. Without it the code
+looks correct and does nothing.
+
+**Why the controls are disabled.** `processEvents()` delivers whatever is
+queued, including a second click on the button that started this. Handing that
+to the same handler would run two imports.
+
+**Why not a worker thread.** That is the honest fix and it is a different piece
+of work: every view would have to handle a reply arriving after the user had
+moved on, and every screen would need a cancelled state. This phase is about
+telling the truth, not about changing the architecture — the window is about to
+freeze, here is why, and here is a cursor that says so.
+
+**Restoration is in a `finally`,** because the interesting case is the request
+that raises: a wait cursor left behind after a failure is a window that looks
+permanently busy. Qt keeps a cursor *stack*, so an unbalanced restore would
+leave it that way for the rest of the session; there is a test for nesting.
+
+**Where it is applied, and where it is not.** Import, export and detection —
+the three requests bounded by file size or by history rather than by page size,
+and therefore the only three that can take long enough to look like a hang. The
+paged list and the dashboard are single-digit milliseconds against localhost and
+are left alone; a busy cursor that flickers for two frames is worse than none.

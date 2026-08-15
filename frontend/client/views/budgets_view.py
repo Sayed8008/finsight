@@ -197,6 +197,16 @@ class BudgetsView(QWidget):
         self.refresh_categories()
         self.reload()
 
+    @property
+    def is_loaded(self) -> bool:
+        """Whether this section has fetched anything yet.
+
+        Asked by the shell before refreshing category pickers: a section nobody
+        has opened has no picker to refresh, and forcing one would make a
+        request for a screen the user may never look at.
+        """
+        return self._loaded
+
     def refresh_categories(self) -> None:
         """Load the category list once, for the filter and the dialog."""
         try:

@@ -484,3 +484,39 @@ def test_an_unreachable_backend_is_reported_not_crashed(qtbot) -> None:
     assert "Cannot reach" in widget.banner.text()
     assert widget.chart.currentIndex() == EMPTY_PAGE
     assert widget.period_label.text() == ""
+
+
+# ─── Tooltips ─────────────────────────────────────────────────────────────
+
+
+def test_a_bar_names_its_category_amount_and_share(qtbot) -> None:
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+    chart.set_currency("BDT")
+    chart.set_shares((share("Food", "4000.00", "40.00"), share("Rent", "6000.00", "60.00")))
+
+    # The bars are drawn reversed so the largest sits at the top, and index 0
+    # is the *bottom* one. Reading the unreversed list here would name the
+    # wrong category on every bar but the middle — right until somebody checks.
+    assert chart.tooltip_for(0) == "Rent · 6,000.00 BDT · 60% of spending"
+    assert chart.tooltip_for(1) == "Food · 4,000.00 BDT · 40% of spending"
+
+
+def test_a_tooltip_for_a_bar_that_is_not_there_is_empty(qtbot) -> None:
+    """Qt can emit a hover for an index outside the current data during a
+    redraw, and an IndexError inside a signal handler is a crash."""
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+    chart.set_shares((share("Food", "10.00", "100.00"),))
+
+    assert chart.tooltip_for(4) == ""
+    assert chart.tooltip_for(-1) == ""
+
+
+def test_spending_tooltips_follow_a_redraw(qtbot) -> None:
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+    chart.set_shares((share("Food", "10.00", "100.00"),))
+    chart.set_shares((share("Rent", "20.00", "100.00"),))
+
+    assert chart.tooltip_for(0).startswith("Rent")

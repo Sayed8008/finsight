@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -19,6 +18,7 @@ from PySide6.QtWidgets import QApplication, QCheckBox
 
 from client.api.client import ApiError
 from client.api.dto import Budget, Category
+from client.main import load_stylesheet
 from client.views.budgets_view import CARDS_PAGE, EMPTY_PAGE, BudgetsView
 from client.widgets.budget_card import BudgetCard
 from client.widgets.budget_dialog import BudgetDialog, month_bounds
@@ -538,9 +538,7 @@ def test_the_filter_checkbox_actually_has_a_box(qtbot) -> None:
     a checkbox with no box — clickable, checkable and invisible. Only the
     pixels show it, so this counts the drawn colours where the indicator sits.
     """
-    stylesheet = (
-        Path(__file__).resolve().parents[1] / "client" / "resources" / "style.qss"
-    ).read_text()
+    stylesheet = load_stylesheet()
     app = QApplication.instance()
     previous = app.styleSheet()
     app.setStyleSheet(stylesheet)
@@ -576,9 +574,7 @@ def test_the_card_buttons_are_actually_painted(qtbot) -> None:
     border, so "not painted" and "painted correctly" both look white in a
     geometry test. Only the border pixel distinguishes them.
     """
-    stylesheet = (
-        Path(__file__).resolve().parents[1] / "client" / "resources" / "style.qss"
-    ).read_text()
+    stylesheet = load_stylesheet()
     app = QApplication.instance()
     previous = app.styleSheet()
     app.setStyleSheet(stylesheet)

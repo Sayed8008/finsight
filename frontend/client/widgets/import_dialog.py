@@ -60,6 +60,7 @@ from client.api.dto import (
     ImportResult,
     PreviewRow,
 )
+from client.widgets.busy import working
 from client.widgets.forms import LabelledWidget, MessageBanner
 
 logger = logging.getLogger(__name__)
@@ -287,9 +288,14 @@ class ImportDialog(QDialog):
     def check_file(self) -> None:
         """Ask what importing this file would do. Creates nothing."""
         try:
-            preview = self._api.preview_import(
-                self._content, filename=self._filename, **self.options()
-            )
+            with working(
+                banner=self.banner,
+                message="Reading the file…",
+                disable=(self.check_button, self.import_button),
+            ):
+                preview = self._api.preview_import(
+                    self._content, filename=self._filename, **self.options()
+                )
         except ApiError as exc:
             logger.warning("Could not read %s: %s", self._filename, exc.message)
             self.preview = None
@@ -317,12 +323,17 @@ class ImportDialog(QDialog):
             return
 
         try:
-            self.result = self._api.import_transactions(
-                self._content,
-                digest=self.preview.digest,
-                filename=self._filename,
-                **self.options(),
-            )
+            with working(
+                banner=self.banner,
+                message=f"Importing {self.preview.would_import} transactions…",
+                disable=(self.check_button, self.import_button),
+            ):
+                self.result = self._api.import_transactions(
+                    self._content,
+                    digest=self.preview.digest,
+                    filename=self._filename,
+                    **self.options(),
+                )
         except ApiError as exc:
             logger.warning("Could not import %s: %s", self._filename, exc.message)
             self.banner.show_error(exc.message)

@@ -39,7 +39,14 @@ def register_error_handlers(app: FastAPI) -> None:
             request.url.path,
             exc.message,
         )
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message},
+            # Almost always empty. A 429 carries `Retry-After`, without which
+            # the status tells a client to back off for an unknown length of
+            # time and it can only guess.
+            headers=exc.headers or None,
+        )
 
     @app.exception_handler(SQLAlchemyError)
     async def handle_database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
