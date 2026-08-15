@@ -2,8 +2,9 @@
 
 > Personal finance and subscription intelligence — a desktop application.
 
-**Status:** in development (Phase 4 — transactions and categories; recording,
-filtering, editing and deleting, with a paged transactions table)
+**Status:** in development (Phase 5 — transactions, categories and budgets;
+a paged transactions table and per-category spending limits with live
+utilisation)
 
 FinSight helps a single user understand where their money goes: spending by
 category, budget health, savings trends, and — its distinguishing feature —

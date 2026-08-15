@@ -396,13 +396,171 @@ QWidget {
     background-color: transparent;
 }
 
-/* ─── Dialogs ───────────────────────────────────────────────────────────── */
+/* ─── Budgets ───────────────────────────────────────────────────────────── */
 
-#TransactionDialog {
+#CardScroll,
+#CardHolder {
+    background-color: transparent;
+}
+
+#BudgetCard {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-left: 3px solid #cdd2d9;
+    border-radius: 8px;
+}
+
+/* The left edge carries the status, so a card's state is readable before any
+ * of its numbers are. */
+#BudgetCard[status="healthy"]  { border-left-color: #1a7f4b; }
+#BudgetCard[status="warning"]  { border-left-color: #d9782e; }
+#BudgetCard[status="exceeded"] { border-left-color: #b4232c; }
+
+/* Each label is made transparent by its own id. `#BudgetCard QWidget` would be
+ * shorter and would also match the Edit and Delete buttons — outranking
+ * `#SecondaryButton`, and painting them in nothing (ADR-022). It would also
+ * fight the swatch, whose colour is set per category from the data. */
+#BudgetCategory {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#BudgetPeriod {
+    font-size: 12px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+#BudgetSpent {
+    font-size: 13px;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+#BudgetRemaining {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#BudgetPercentage {
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b7480;
+    background-color: transparent;
+    min-width: 62px;
+    qproperty-alignment: 'AlignRight | AlignVCenter';
+}
+
+#BudgetRemaining[status="exceeded"],
+#BudgetPercentage[status="exceeded"] {
+    color: #b4232c;
+}
+
+#BudgetRemaining[status="warning"],
+#BudgetPercentage[status="warning"] {
+    color: #b8620f;
+}
+
+#BudgetBar {
+    border: none;
+    border-radius: 4px;
+    background-color: #eef0f3;
+}
+
+#BudgetBar::chunk {
+    border-radius: 4px;
+    background-color: #1a7f4b;
+}
+
+#BudgetBar[status="warning"]::chunk  { background-color: #d9782e; }
+#BudgetBar[status="exceeded"]::chunk { background-color: #b4232c; }
+
+/* ─── Summary strip ─────────────────────────────────────────────────────── */
+
+#SummaryStrip {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-radius: 8px;
+}
+
+#SummaryCaption {
+    font-size: 12px;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+#SummaryValue {
+    font-size: 17px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#SummaryValue[status="exceeded"] {
+    color: #b4232c;
+}
+
+/* ─── Check boxes ───────────────────────────────────────────────────────── */
+
+/* The indicator has to be styled explicitly. Qt switches a widget to
+ * stylesheet rendering as soon as *any* rule matches it, and then draws only
+ * what the sheet describes — so styling just the label leaves a checkbox with
+ * no box at all: clickable, checkable, and invisible. Found by rendering it
+ * (ADR-012); a `::indicator` rule is the fix.
+ *
+ * Typed rather than by id so every checkbox added later works by default. */
+QCheckBox {
+    font-size: 13px;
+    color: #4a5259;
+    background-color: transparent;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #cdd2d9;
+    border-radius: 4px;
     background-color: #ffffff;
 }
 
-#TransactionDialog QLabel {
+QCheckBox::indicator:hover {
+    border-color: #1a56c4;
+}
+
+/* A solid fill rather than a tick: a tick needs an image asset, and filled
+ * versus empty is unambiguous on its own. */
+QCheckBox::indicator:checked {
+    background-color: #1a56c4;
+    border-color: #1a56c4;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: #f0f2f5;
+    border-color: #e3e6ea;
+}
+
+#FilterCheck {
+    font-size: 13px;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+/* ─── Dialogs ───────────────────────────────────────────────────────────── */
+
+#TransactionDialog,
+#BudgetDialog {
+    background-color: #ffffff;
+}
+
+/* Scoped to QLabel, never QWidget: `#Dialog QWidget` also matches every button
+ * inside and outranks `#PrimaryButton`, which paints it in nothing (ADR-022). */
+#TransactionDialog QLabel,
+#BudgetDialog QLabel {
     background-color: transparent;
 }
 

@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx2
 
-from client.api.dto import Category, Token, Transaction, TransactionPage, User
+from client.api.dto import Budget, Category, Token, Transaction, TransactionPage, User
 from client.core.config import ClientConfig
 
 logger = logging.getLogger(__name__)
@@ -255,6 +255,35 @@ class ApiClient:
         user to remember how they spelled "bKash" last time.
         """
         return list(self._request("GET", f"{self._v1}/transactions/payment-methods"))
+
+    # ─── Budgets ──────────────────────────────────────────────────────────
+    def budgets(
+        self, *, category_id: int | None = None, current_only: bool = False
+    ) -> list[Budget]:
+        """Budgets with their utilisation already worked out.
+
+        Spent, remaining, percentage and status arrive computed. The client
+        never recalculates them: a second implementation of the thresholds is a
+        second thing to keep in step, and the two would eventually disagree.
+        """
+        payload = self._request(
+            "GET",
+            f"{self._v1}/budgets",
+            params=_without_none(
+                {"category_id": category_id, "current_only": current_only or None}
+            ),
+        )
+        return [Budget.from_json(item) for item in payload]
+
+    def create_budget(self, **fields: Any) -> Budget:
+        return Budget.from_json(self._request("POST", f"{self._v1}/budgets", json=fields))
+
+    def update_budget(self, budget_id: int, **changes: Any) -> Budget:
+        payload = self._request("PATCH", f"{self._v1}/budgets/{budget_id}", json=changes)
+        return Budget.from_json(payload)
+
+    def delete_budget(self, budget_id: int) -> None:
+        self._request("DELETE", f"{self._v1}/budgets/{budget_id}")
 
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:

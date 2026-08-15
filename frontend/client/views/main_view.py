@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QWidget
 
 from client.api.client import ApiClient
 from client.api.dto import User
+from client.views.budgets_view import BudgetsView
 from client.views.placeholder import PlaceholderView
 from client.views.transactions_view import TransactionsView
 from client.widgets.sidebar import NAV_ITEMS, Sidebar
@@ -22,16 +23,13 @@ logger = logging.getLogger(__name__)
 #: Sections that have a real view. Anything not listed still gets a
 #: placeholder, so adding a section to the sidebar cannot crash the shell.
 TRANSACTIONS = "transactions"
+BUDGETS = "budgets"
 
 # What each section will contain, shown until the real view is built.
 SECTION_DESCRIPTIONS: dict[str, tuple[str, str]] = {
     "dashboard": (
         "Dashboard",
         "Balance, monthly summary, charts and insights will appear here.",
-    ),
-    "budgets": (
-        "Budgets",
-        "Monthly budgets per category, with spend tracking and alerts.",
     ),
     "subscriptions": (
         "Subscriptions",
@@ -69,6 +67,7 @@ class MainView(QWidget):
         layout.addWidget(self.sidebar)
 
         self.transactions_view = TransactionsView(api_client)
+        self.budgets_view = BudgetsView(api_client)
 
         self.pages = QStackedWidget()
         self.pages.setObjectName("ContentArea")
@@ -78,8 +77,12 @@ class MainView(QWidget):
         layout.addWidget(self.pages, stretch=1)
 
     def _page_for(self, key: str) -> QWidget:
-        if key == TRANSACTIONS:
-            return self.transactions_view
+        real_views: dict[str, QWidget] = {
+            TRANSACTIONS: self.transactions_view,
+            BUDGETS: self.budgets_view,
+        }
+        if key in real_views:
+            return real_views[key]
         title, message = SECTION_DESCRIPTIONS[key]
         return PlaceholderView(title, message)
 
@@ -99,5 +102,7 @@ class MainView(QWidget):
         # query they never look at.
         if key == TRANSACTIONS:
             self.transactions_view.load_once(self._currency)
+        elif key == BUDGETS:
+            self.budgets_view.load_once(self._currency)
 
         self.pages.setCurrentIndex(index)

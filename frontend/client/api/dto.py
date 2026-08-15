@@ -157,3 +157,62 @@ class TransactionPage:
     def empty(cls, page_size: int) -> TransactionPage:
         """The page to show before anything has loaded, or after a failure."""
         return cls(items=(), total=0, page=1, page_size=page_size, pages=0)
+
+
+#: Budget statuses, mirroring `BudgetStatus` on the server. Held as plain
+#: strings rather than an enum: the client's job is to colour what it is told,
+#: not to decide the thresholds, and an unrecognised value must render rather
+#: than raise.
+HEALTHY = "healthy"
+WARNING = "warning"
+EXCEEDED = "exceeded"
+
+
+@dataclass(frozen=True)
+class Budget:
+    """A spending limit, together with progress against it.
+
+    Everything from `spent` down is computed by the server on each read and
+    stored nowhere (ADR-015). The client does not recompute any of it — that
+    would be a second implementation of the thresholds, free to disagree with
+    the first.
+    """
+
+    id: int
+    category: Category
+    amount: Decimal
+    period_start: date_type
+    period_end: date_type
+    spent: Decimal
+    #: Negative when overspent.
+    remaining: Decimal
+    percentage_used: Decimal
+    status: str
+    is_current: bool
+    days_remaining: int | None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Budget:
+        days = payload.get("days_remaining")
+        return cls(
+            id=int(payload["id"]),
+            category=Category.from_json(payload["category"]),
+            amount=Decimal(payload["amount"]),
+            period_start=date_type.fromisoformat(payload["period_start"]),
+            period_end=date_type.fromisoformat(payload["period_end"]),
+            spent=Decimal(payload["spent"]),
+            remaining=Decimal(payload["remaining"]),
+            percentage_used=Decimal(payload["percentage_used"]),
+            status=payload["status"],
+            is_current=bool(payload["is_current"]),
+            days_remaining=int(days) if days is not None else None,
+        )
+
+    @property
+    def is_overspent(self) -> bool:
+        return self.remaining < 0
+
+    @property
+    def overspend(self) -> Decimal:
+        """How far past the limit, as a positive number. Zero if within it."""
+        return -self.remaining if self.is_overspent else Decimal("0.00")

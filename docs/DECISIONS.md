@@ -390,3 +390,68 @@ and would not catch it again; only the pixels distinguish "painted" from
 **Corollary:** the same trap applies to `alternate-background-color`, borders
 and padding. If a rule needs to reach a group of widgets, the group gets a
 shared object name.
+
+**It happened again in Phase 5,** while writing `#BudgetCard QWidget` for the
+same reason as before. Caught by the ADR rather than by the pixels this time,
+which is what the ADR is for.
+
+---
+
+## ADR-023 — Budgets: expense categories only, and no overlapping periods
+**Date:** 2026-08-15 · **Status:** Accepted
+
+A budget can only be set on an **expense** category, and two budgets for the
+same category may not **overlap in time**.
+
+**Why (expense only):** every figure a budget produces — spent, remaining,
+percentage — is a sum of expenses. "Spend no more than X on Salary" is not a
+sentence anyone means, and allowing it would put a permanently 0%-used card on
+the screen with no way to act on it.
+
+**Why (no overlap):** the question a budget exists to answer is "how much is
+left for Food?". With two budgets both covering today, that question has two
+answers, and every consumer — the card list, the dashboard, the insight rules
+in Phase 9 — would have to pick one arbitrarily. Better to refuse at the point
+of creation, where the user can see both periods, than to disambiguate forever
+afterwards.
+
+**What the schema could not do:** the unique constraint is on
+`(user_id, category_id, period_start, period_end)`, so it only catches an
+*exactly repeated* period. 1–31 March and 10–20 March pass it happily. The rule
+therefore lives in the service, expressed as `start <= other_end AND end >=
+other_start` — stated explicitly because the intuitive version, comparing start
+to start, misses a period sitting entirely inside another. Both that case and
+its mirror have tests.
+
+**Rejected:** allowing overlap and summing, or preferring the shortest period.
+Both are rules the user cannot see and would have to be told about.
+
+**Accepted cost:** a weekly and a monthly budget on the same category cannot
+coexist. Revisit if anyone actually wants that — it would mean deciding which
+one the dashboard reports.
+
+---
+
+## ADR-024 — Styling a Qt widget means styling its sub-controls too
+**Date:** 2026-08-15 · **Status:** Accepted
+
+If a stylesheet rule matches a composite widget, that widget's sub-controls
+(`::indicator`, `::chunk`, `::drop-down`, `::handle`) must be styled as well.
+
+**Why:** Qt switches a widget to stylesheet rendering as soon as *any* rule
+matches it, and then draws only what the sheet describes. A `QCheckBox` given
+nothing but `color` and `background-color` renders as a label with **no box** —
+still clickable, still checkable, still reporting `isVisible()` as true, and
+completely invisible. The same applies to a `QProgressBar` without `::chunk`,
+which is why the budget bars style theirs.
+
+**Found by:** rendering the budgets screen and looking at it — the checkbox in
+the filter bar was a floating line of text.
+
+**Tested by:** grabbing the checkbox and asserting the border colour appears in
+the indicator area unchecked, and the primary blue appears checked. As with
+ADR-022, no test of geometry or visibility would catch this.
+
+**Related:** ADR-012 (layout bugs are found by rendering) and ADR-022 (Qt
+stylesheet specificity). Three separate faults now, all invisible in the source
+and all obvious in a screenshot.
