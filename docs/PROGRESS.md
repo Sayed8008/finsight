@@ -3,7 +3,8 @@
 Where the project stands, and what comes next. Updated at the end of each
 phase.
 
-**Last updated:** 2026-08-15 · **Current state:** Phase 12 complete — all phases done
+**Last updated:** 2026-08-16 · **Current state:** Phase 12 complete — all phases done,
+final QA passed
 
 ---
 
@@ -20,7 +21,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1179 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1372 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -135,11 +136,51 @@ refreshes the pickers on every screen that is already open (ADR-037), and the
 three requests that can take real time — import, export, detection — say so
 before they block, since every request in this client is synchronous (ADR-038).
 
-**Tests** — 1179 passing: security, money, budget-arithmetic, billing-cycle,
+**Tests** — 1372 passing: security, money, budget-arithmetic, billing-cycle,
 recurrence, CSV-format, rate-limit and demo-data unit tests; model/constraint and
 repository tests against real MySQL; API tests for every feature area; and GUI
 tests via pytest-qt, including pixel checks on things no geometry assertion can
 catch.
+
+---
+
+## Final QA pass — 2026-08-16
+
+A release-verification pass over the whole application: the running PySide6
+client driven against the live API and MySQL, not a code read.
+
+- **121 manual checks** completed across authentication, dashboard,
+  transactions, budgets, subscriptions, analytics, insights, savings journey,
+  settings, error handling, multi-user isolation and restart persistence.
+- **1,372 automated tests passing**; `ruff check .` clean.
+- **No application code was changed.** The pass found no application bugs.
+- Five checks failed on the first run and were confirmed to be **errors in the
+  QA harness, not the application**: `edit_transaction` takes a row index
+  rather than an id, the amount filter commits on `editingFinished` so a
+  programmatic `setText` does not trigger it, and the search and export checks
+  cascaded from a row the harness itself had deleted. All five were re-tested
+  correctly and passed.
+- Current `main`: **190ecf1**.
+
+Rollback points preserved (all pushed):
+
+| Ref | Commit | What it is |
+|---|---|---|
+| `stable-animated-v1` (tag) | `ca692cf` | Before the motion refinement |
+| `stable/pre-motion-refinement` (branch) | `ca692cf` | Same, as a branch |
+| `stable-pre-animation` (tag) | `fc382e4` | Before any animation work |
+
+**Two things this pass did not verify**, so the result should not be read as
+covering them:
+
+1. **No completely fresh MySQL database installation was tested.** The
+   `finsight` database user is deliberately restricted to `finsight` and
+   `finsight_test`, so a scratch database could not be created. Clean-schema
+   migration is still exercised on every test run — `backend/tests/conftest.py`
+   drops every table and runs Alembic rather than `create_all` — but a
+   from-nothing install following `README.md` was not performed.
+2. **No fresh empty-venv `pip install` was tested.** Dependency resolution from
+   a clean environment is unverified.
 
 ---
 
