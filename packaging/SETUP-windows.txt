@@ -1,0 +1,99 @@
+FinSight for Windows — setup
+============================
+
+READ THIS FIRST
+---------------
+FinSight needs MySQL 8 installed and running on this PC.
+
+That is not optional and there is no built-in database. FinSight will not
+start without it. Installing MySQL is the longest part of this setup; the
+rest takes two minutes.
+
+You do NOT need Python. Everything else is inside this folder.
+
+
+1. INSTALL MYSQL
+----------------
+Download "MySQL Installer for Windows" from:
+
+    https://dev.mysql.com/downloads/installer/
+
+Choose the "Server only" setup type. When it asks:
+
+  * Authentication method  — keep the default ("Strong Password Encryption").
+  * Root password          — choose one and WRITE IT DOWN. You need it once,
+                             in step 2.
+  * Windows Service        — leave "Start the MySQL Server at System Startup"
+                             ticked, so FinSight works after a reboot.
+
+When the installer finishes, MySQL is running as a Windows service.
+
+
+2. CREATE THE DATABASE
+----------------------
+Open "MySQL 8.0 Command Line Client" from the Start menu and enter the root
+password from step 1. Then paste these four lines, one at a time:
+
+    CREATE DATABASE finsight CHARACTER SET utf8mb4;
+    CREATE USER 'finsight'@'localhost' IDENTIFIED BY 'ChooseAPassword123';
+    GRANT ALL PRIVILEGES ON finsight.* TO 'finsight'@'localhost';
+    FLUSH PRIVILEGES;
+
+Replace ChooseAPassword123 with a password of your own, and remember it —
+it goes into step 3. Keep the quotes.
+
+Type  exit  to close the client.
+
+
+3. CREATE THE .env FILE
+-----------------------
+In this folder (the one containing FinSight.exe), create a file named
+
+    .env
+
+containing exactly two lines:
+
+    SECRET_KEY=change-this-to-a-long-random-string-of-your-own
+    DATABASE_URL=mysql+pymysql://finsight:ChooseAPassword123@localhost:3306/finsight
+
+  * Use the SAME password you chose in step 2.
+  * SECRET_KEY can be any long random text. It signs your login session; it
+    is not a password you need to remember.
+
+Making the file in Notepad: File > Save As, set "Save as type" to
+"All Files", and name it  .env  (with the dot, and no .txt on the end).
+Windows hides known extensions by default, so a file that looks like ".env"
+may really be ".env.txt" — turn on "File name extensions" in Explorer's View
+tab to check.
+
+
+4. RUN IT
+---------
+Double-click FinSight.exe.
+
+  * Windows SmartScreen may say "Windows protected your PC" because this
+    application is not code-signed. Click "More info", then "Run anyway".
+    Signing requires a paid certificate.
+  * The first launch creates the tables it needs. This takes a few seconds.
+  * Register an account on the first screen. It is stored on this PC only.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+FinSight shows a dialog naming the file or setting it could not find, rather
+than closing without explanation. The usual causes:
+
+  "No configuration file found"
+      The .env file is missing, or Notepad saved it as .env.txt.
+
+  "The FinSight API did not become ready"
+      MySQL is not running, or the password in .env does not match step 2.
+      Check the service: press Win+R, type  services.msc  , find "MySQL80"
+      and make sure it says Running.
+
+
+ABOUT YOUR DATA
+---------------
+Everything stays on this PC, in your own MySQL database. FinSight does not
+connect to banks and sends nothing anywhere. Transactions are typed in by
+hand or imported from a CSV file you provide.

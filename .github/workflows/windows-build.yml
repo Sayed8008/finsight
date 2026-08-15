@@ -1,0 +1,83 @@
+name: Windows build
+
+# Builds the Windows copy of FinSight on a Windows runner, because a Windows
+# executable can only be produced on Windows — PyInstaller freezes the
+# interpreter and libraries of the machine it runs on, and there is no
+# cross-compilation. This exists so that shipping to Windows friends does not
+# require keeping a Windows development machine.
+#
+# Run it from the Actions tab (Run workflow), or by pushing a v* tag.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches the floor in pyproject.toml. Pinned to a minor version so
+          # a runner image update cannot silently change what is shipped.
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.22.1
+
+      - name: Generate the Windows icon
+        # PyInstaller refuses an SVG on Windows, so the .ico is rendered from
+        # the same SVG the application uses. Committed too, but regenerated
+        # here so a stale checkout cannot ship a mismatched icon.
+        run: python packaging/make_icon.py
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Build
+        run: pyinstaller packaging/finsight.spec --noconfirm --distpath dist --workpath build/pyinstaller
+
+      - name: Add the setup guide
+        # Beside the executable rather than inside _internal, which is where
+        # PyInstaller puts data files and where nobody would look for it.
+        run: copy packaging\SETUP-windows.txt dist\FinSight\SETUP.txt
+
+      - name: Check the build looks right before packaging it
+        shell: pwsh
+        run: |
+          $exe = "dist\FinSight\FinSight.exe"
+          if (-not (Test-Path $exe)) { throw "FinSight.exe was not produced" }
+
+          # A .env would carry a SECRET_KEY and a database password to
+          # everybody who downloads this.
+          $leaked = Get-ChildItem -Path dist\FinSight -Recurse -Force -Include ".env", "*.sqlite", "*.db" -ErrorAction SilentlyContinue
+          if ($leaked) { throw "Refusing to package: found $($leaked.Name)" }
+
+          $size = [math]::Round((Get-ChildItem dist\FinSight -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+          Write-Host "FinSight.exe present, folder is $size MB"
+
+      - name: Create the ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\FinSight -DestinationPath dist\FinSight-windows-x86_64.zip -Force
+          $zip = Get-Item dist\FinSight-windows-x86_64.zip
+          Write-Host "ZIP is $([math]::Round($zip.Length / 1MB, 1)) MB"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FinSight-windows-x86_64
+          path: dist/FinSight-windows-x86_64.zip
+          retention-days: 30
+          if-no-files-found: error

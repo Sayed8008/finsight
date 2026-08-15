@@ -16,11 +16,30 @@
 #   * `.env`. It holds a SECRET_KEY and a database password. Bundling one would
 #     ship the developer's credentials to everybody who received a copy.
 
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
 
 PROJECT = Path(SPECPATH).parent
+RESOURCES = PROJECT / "frontend" / "client" / "resources"
+WINDOWS = sys.platform == "win32"
+
+# Windows executables carry a `.ico` and PyInstaller refuses anything else on
+# that platform; elsewhere the SVG the application itself uses is fine. The
+# `.ico` is generated from that same SVG by `packaging/make_icon.py`, so the
+# two cannot drift.
+ICON = RESOURCES / ("finsight.ico" if WINDOWS else "finsight.svg")
+if not ICON.is_file():
+    raise SystemExit(
+        f"Missing icon: {ICON}\n"
+        "On Windows, generate it first:  python packaging/make_icon.py"
+    )
+
+# The name Windows expects on an executable. PyInstaller adds it on Windows
+# whether or not it is written here, but being explicit means the zip contents
+# are predictable from reading this file.
+EXE_NAME = "FinSight"
 
 # The QSS and the icons are read from disk at runtime, so they have to travel
 # with the bundle rather than being imported.
@@ -82,13 +101,13 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="FinSight",
+    name=EXE_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     console=False,          # a desktop application, not a terminal one
-    icon=str(PROJECT / "frontend" / "client" / "resources" / "finsight.svg"),
+    icon=str(ICON),
 )
 
 coll = COLLECT(

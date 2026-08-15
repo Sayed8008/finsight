@@ -1,0 +1,62 @@
+FinSight for Linux — setup
+==========================
+
+READ THIS FIRST
+---------------
+FinSight needs MySQL 8 installed and running on this computer. There is no
+built-in database and FinSight will not start without it.
+
+You do NOT need Python. Everything else is inside this folder.
+
+
+1. INSTALL MYSQL
+
+    sudo apt install mysql-server        # Debian / Ubuntu
+    sudo systemctl enable --now mysql
+
+2. CREATE THE DATABASE
+
+    sudo mysql
+
+   Then, replacing the password with one of your own:
+
+    CREATE DATABASE finsight CHARACTER SET utf8mb4;
+    CREATE USER 'finsight'@'localhost' IDENTIFIED BY 'ChooseAPassword123';
+    GRANT ALL PRIVILEGES ON finsight.* TO 'finsight'@'localhost';
+    FLUSH PRIVILEGES;
+    exit
+
+3. CREATE THE .env FILE
+
+   In this folder, next to the FinSight executable, create a file named .env
+   with two lines:
+
+    SECRET_KEY=change-this-to-a-long-random-string-of-your-own
+    DATABASE_URL=mysql+pymysql://finsight:ChooseAPassword123@localhost:3306/finsight
+
+   Generate a key with:   openssl rand -base64 48
+   Use the same password you chose in step 2.
+
+4. RUN IT
+
+    ./FinSight
+
+   The first launch creates the tables it needs. Register an account on the
+   first screen.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+FinSight names the file or setting it could not find, rather than closing
+without explanation.
+
+  "No configuration file found"          — .env is missing from this folder.
+  "The FinSight API did not become ready" — MySQL is not running, or the
+                                            password in .env is wrong.
+                                            Check:  systemctl status mysql
+
+
+ABOUT YOUR DATA
+---------------
+Everything stays on this computer, in your own MySQL database. FinSight does
+not connect to banks and sends nothing anywhere.
