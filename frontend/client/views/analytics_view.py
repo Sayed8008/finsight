@@ -191,15 +191,30 @@ class AnalyticsView(QWidget):
     # ─── Loading ──────────────────────────────────────────────────────────
 
     def load_once(self, currency: str = "") -> None:
+        """Set what belongs to the user. `reload` fetches the figures, and the
+        shell calls it every time this section is shown."""
         self._currency = currency
         # The chart labels its own tooltips, and the currency is per user, so
         # it cannot be known until somebody is signed in.
         self.trend_chart.set_currency(currency)
-        if self._loaded:
-            return
         self._loaded = True
+
+    def reload(self) -> None:
+        """Both requests. They are independent and tracked separately (ADR-028),
+        but a visit to this screen wants each of them current."""
         self.reload_trend()
         self.reload_comparison()
+
+    def reset(self) -> None:
+        """Forget this session's data. See `DashboardView.reset`."""
+        self._loaded = False
+        self._currency = ""
+        self._trend = Trend.empty()
+        self._comparison = Comparison.empty()
+        self._failures.clear()
+        self.banner.clear_message()
+        self.trend_chart.set_months((), has_activity=False)
+        self._render_rows(())
 
     def reload_trend(self) -> None:
         """Refetch only the trend. The comparison does not depend on the span."""

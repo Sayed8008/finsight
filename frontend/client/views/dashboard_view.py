@@ -233,7 +233,12 @@ class DashboardView(QWidget):
     # ─── Loading ──────────────────────────────────────────────────────────
 
     def load_once(self, currency: str = "", name: str = "") -> None:
-        """Fetch on first open; refresh the greeting every time.
+        """Set what belongs to the signed-in user, not to their data.
+
+        Deliberately does **not** fetch. The shell calls `reload` every time
+        this section is opened, because the dashboard summarises data every
+        other screen can change — a figure cached from the first visit is wrong
+        the moment a transaction is added anywhere else.
 
         `name` is the user's *full* name, deliberately. Shortening it means
         guessing which word someone goes by, and that is not decidable from the
@@ -245,11 +250,21 @@ class DashboardView(QWidget):
         self.chart.set_currency(currency)
         if name:
             self.greeting.setText(f"Hello, {name}")
-
-        if self._loaded:
-            return
         self._loaded = True
-        self.reload()
+
+    def reset(self) -> None:
+        """Forget everything, because the session it belonged to has ended.
+
+        These widgets outlive a sign-out — the shell swaps which page is shown
+        rather than rebuilding the application — so anything still held here is
+        one user's data sitting in the next user's window.
+        """
+        self._loaded = False
+        self._currency = ""
+        self._dashboard = Dashboard.empty()
+        self.greeting.setText("")
+        self.banner.clear_message()
+        self._render()
 
     def reload(self) -> None:
         """Fetch the whole dashboard in one request."""

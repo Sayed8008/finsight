@@ -147,6 +147,7 @@ def view(qtbot) -> DashboardView:
     widget = DashboardView(StubApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
     return widget
 
 
@@ -162,12 +163,23 @@ def test_the_whole_screen_comes_from_one_request(view: DashboardView) -> None:
     assert len(api_of(view).calls) == 1
 
 
-def test_opening_twice_does_not_refetch(view: DashboardView) -> None:
+def test_reopening_the_section_fetches_current_data(view: DashboardView) -> None:
+    """The defect this replaced: these tests used to assert the opposite.
+
+    A section that fetched once and never again showed whatever was true the
+    first time it was opened. That is wrong for every screen here, because they
+    all describe one account from different angles — a transaction added on one
+    changes what the others should say, and none of them know it happened.
+
+    What is *not* refetched is the one-off lookups: `load_once` still only
+    fetches the category and payment-method lists once.
+    """
     before = len(api_of(view).calls)
 
     view.load_once("BDT", "Sayed")
+    view.reload()
 
-    assert len(api_of(view).calls) == before
+    assert len(api_of(view).calls) == before + 1
 
 
 def test_the_greeting_uses_the_name_it_was_given(view: DashboardView) -> None:
@@ -226,6 +238,7 @@ def test_a_negative_month_is_flagged_and_explained(qtbot) -> None:
     widget = DashboardView(StubApi(dashboard(income="1000.00", expense="2500.00")))
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     assert widget.net_tile.value_label.text() == "-1,500.00 BDT"
     assert widget.net_tile.value_label.property("tone") == NEGATIVE
@@ -240,6 +253,7 @@ def test_a_period_spanning_months_shows_both_ends(qtbot) -> None:
     widget = DashboardView(StubApi(dashboard(start="2026-01-01", end="2026-03-31")))
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     assert widget.period_label.text() == "01 Jan 2026 – 31 Mar 2026"
 
@@ -248,6 +262,7 @@ def test_the_subscription_tile_shows_the_monthly_commitment(qtbot) -> None:
     widget = DashboardView(StubApi(dashboard(active=2, upcoming=subscription())))
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     assert widget.commitment_tile.value_label.text() == "499.00 BDT"
     assert widget.commitment_tile.detail_label.text() == "2 active"
@@ -370,6 +385,7 @@ def test_the_dashboard_passes_its_breakdown_to_the_chart(qtbot) -> None:
     widget = DashboardView(StubApi(dashboard(spending=(share("Rent", "900.00", "100.00"),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     assert widget.chart.bar_values == [900.0]
 
@@ -383,6 +399,7 @@ def test_recent_rows_are_listed(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     rows = widget._recent_holder.findChildren(type(widget._recent_holder), "RecentRow")
     assert len(rows) == 3
@@ -400,6 +417,7 @@ def test_income_and_expense_are_signed_in_the_recent_list(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     amounts = [label.text() for label in widget.findChildren(QLabel, "RecentAmount")]
     assert amounts == ["+250.00 BDT"]
@@ -416,6 +434,7 @@ def test_the_attention_bar_renders_the_top_insight(qtbot) -> None:
     widget = DashboardView(StubApi(dashboard(insights=(insight(),), needs_attention=1)))
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     assert "Food budget exceeded" in widget.attention_label.text()
     assert "12,000.00" in widget.attention_label.text()
@@ -433,6 +452,7 @@ def test_the_attention_bar_counts_the_rest(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     assert "2 more" in widget.attention_label.text()
 
@@ -448,6 +468,7 @@ def test_good_news_only_leaves_the_bar_calm(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT", "Sayed")
+    widget.reload()
 
     assert "Food spending is down" in widget.attention_label.text()
     assert widget.attention_bar.property("state") == "calm"
@@ -480,6 +501,9 @@ def test_an_unreachable_backend_is_reported_not_crashed(qtbot) -> None:
     qtbot.addWidget(widget)
 
     widget.load_once("BDT", "Sayed")
+    widget.reload()
+
+    widget.reload()
 
     assert "Cannot reach" in widget.banner.text()
     assert widget.chart.currentIndex() == EMPTY_PAGE
@@ -520,3 +544,50 @@ def test_spending_tooltips_follow_a_redraw(qtbot) -> None:
     chart.set_shares((share("Rent", "20.00", "100.00"),))
 
     assert chart.tooltip_for(0).startswith("Rent")
+
+
+# ─── Redrawing must not stack one render on the last ──────────────────────
+#
+# Found while fixing the stale-dashboard bug, and caused by it: nothing ever
+# redrew a chart, because every screen fetched once per run. The moment the
+# dashboard refreshed, the previous render's axis labels were still painted
+# underneath the new ones — "Rent 60%" over "Shopping 50%".
+
+
+def visible_items(chart: SpendingChart) -> int:
+    return len([item for item in chart.view.scene().items() if item.isVisible()])
+
+
+def test_redrawing_the_spending_chart_does_not_accumulate(qtbot) -> None:
+    """`removeAllSeries` deletes what it owns; recreated axes were not deleted,
+    so each redraw left its labels behind. Counting what the scene actually
+    draws is the only way to see it — the chart's own data was correct
+    throughout, which is why no functional assertion caught it."""
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+    chart.show()
+
+    breakdown = (share("Rent", "100.00", "60.00"), share("Food", "40.00", "40.00"))
+
+    chart.set_shares(breakdown)
+    qtbot.wait(1)
+    after_first = visible_items(chart)
+
+    # The *same* breakdown, so anything the count gains is left over rather
+    # than a difference in the data — a longer label or an extra grid line
+    # would move this number for honest reasons.
+    for _ in range(5):
+        chart.set_shares(breakdown)
+        qtbot.wait(1)
+
+    assert visible_items(chart) == after_first
+
+
+def test_a_redrawn_chart_shows_only_the_current_categories(qtbot) -> None:
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+
+    chart.set_shares((share("Rent", "100.00", "60.00"),))
+    chart.set_shares((share("Shopping", "80.00", "100.00"),))
+
+    assert chart.axis_labels == ["Shopping  100%"]

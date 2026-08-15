@@ -46,6 +46,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self._pages)
 
         self.session.logged_in.connect(self.main_view.show_user)
+        # Cleared before the screen is swapped, so nothing belonging to the
+        # session that just ended is still in the widgets when the next person
+        # signs in. Connected here rather than done inside `_show_authentication`
+        # because that also runs at startup, when there is nothing to clear.
+        self.session.logged_out.connect(self.main_view.reset)
         self.session.logged_out.connect(self._show_authentication)
 
         self._show_authentication()

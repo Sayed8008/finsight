@@ -218,14 +218,25 @@ class SettingsView(QWidget):
     # ─── Loading ──────────────────────────────────────────────────────────
 
     def load_once(self, user: User | None = None) -> None:
-        """Fetch the categories the first time this section is opened."""
+        """Show the signed-in account. `reload` fetches the categories, and the
+        shell calls it every time this section is shown."""
         if user is not None:
             self._user = user
             self._render_account()
-        if self._loaded:
-            return
         self._loaded = True
-        self.reload()
+
+    def reset(self) -> None:
+        """Forget this session's data. See `DashboardView.reset`."""
+        self._loaded = False
+        self._user = None
+        self._categories = []
+        self.show_retired.setChecked(False)
+        self._clear_list()
+        self.banner.clear_message()
+        self.account_name.setText("—")
+        self.account_email.setText("—")
+        self.account_currency.setText("—")
+        self.count_label.setText("")
 
     def reload(self) -> None:
         try:

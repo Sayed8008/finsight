@@ -191,7 +191,7 @@ Click through from an insight to the screen it concerns.
 > the interface cannot reach the database even if somebody wanted it to. The
 > arithmetic is in pure functions with no database and no clock, which is why
 > there are eleven hundred tests and they run in under two minutes. And the
-> decision log has forty entries, each with what I rejected, because most
+> decision log has forty-two entries, each with what I rejected, because most
 > of the interesting work was in the choices that do not show up as features.
 
 ---

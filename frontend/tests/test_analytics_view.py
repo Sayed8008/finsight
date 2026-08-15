@@ -108,6 +108,7 @@ def view(qtbot) -> AnalyticsView:
     widget = AnalyticsView(StubApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
     return widget
 
 
@@ -123,10 +124,17 @@ def test_opening_fetches_both_the_trend_and_the_comparison(view: AnalyticsView) 
     assert len(api_of(view).comparison_calls) == 1
 
 
-def test_opening_twice_does_not_refetch(view: AnalyticsView) -> None:
-    view.load_once("BDT")
+def test_reopening_the_section_fetches_current_data(view: AnalyticsView) -> None:
+    """Used to assert the opposite. Both requests go out again, because both
+    describe transactions that any other screen may have changed."""
+    trends = len(api_of(view).trend_calls)
+    comparisons = len(api_of(view).comparison_calls)
 
-    assert len(api_of(view).trend_calls) == 1
+    view.load_once("BDT")
+    view.reload()
+
+    assert len(api_of(view).trend_calls) == trends + 1
+    assert len(api_of(view).comparison_calls) == comparisons + 1
 
 
 def test_the_default_span_is_six_months(view: AnalyticsView) -> None:
@@ -223,6 +231,7 @@ def test_earning_more_is_good_news(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.income_tile.value_label.property("tone") == POSITIVE
 
@@ -234,6 +243,7 @@ def test_spending_more_is_bad_news(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.expense_tile.value_label.property("tone") == NEGATIVE
 
@@ -244,6 +254,7 @@ def test_spending_less_is_good_news(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.expense_tile.value_label.property("tone") == POSITIVE
 
@@ -254,6 +265,7 @@ def test_no_change_is_neither(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.expense_tile.value_label.property("tone") == NEUTRAL
 
@@ -268,6 +280,7 @@ def test_a_movement_names_both_the_amount_and_the_percentage(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.expense_tile.detail_label.text() == "up 1,000.00 BDT (50%)"
 
@@ -278,6 +291,7 @@ def test_a_fall_reads_as_down(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.expense_tile.detail_label.text() == "down 1,500.00 BDT (75%)"
 
@@ -286,6 +300,7 @@ def test_something_new_says_so_rather_than_inventing_a_percentage(qtbot) -> None
     widget = AnalyticsView(StubApi(comparison_payload=comparison(expense=change("500.00", "0.00"))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.expense_tile.detail_label.text() == "new this period"
 
@@ -296,6 +311,7 @@ def test_no_movement_says_no_change(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.expense_tile.detail_label.text() == "no change"
 
@@ -322,6 +338,7 @@ def test_each_category_becomes_a_row(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert len(rows_of(widget)) == 2
 
@@ -332,6 +349,7 @@ def test_the_table_stops_after_the_biggest_movers(qtbot) -> None:
     widget = AnalyticsView(StubApi(comparison_payload=comparison(categories=many)))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert len(rows_of(widget)) == MAX_CATEGORY_ROWS
 
@@ -348,6 +366,7 @@ def test_an_empty_comparison_says_so(qtbot) -> None:
     widget = AnalyticsView(StubApi(comparison_payload=comparison(categories=())))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.comparison_empty.isVisibleTo(widget)
     assert rows_of(widget) == []
@@ -369,6 +388,9 @@ def test_an_unreachable_backend_is_reported_not_crashed(qtbot) -> None:
     qtbot.addWidget(widget)
 
     widget.load_once("BDT")
+    widget.reload()
+
+    widget.reload()
 
     assert "Cannot reach" in widget.banner.text()
     assert widget.trend_chart.currentIndex() == EMPTY_PAGE
@@ -385,6 +407,7 @@ def test_one_request_succeeding_does_not_erase_the_others_error(qtbot) -> None:
     qtbot.addWidget(widget)
 
     widget.load_once("BDT")  # trend fails, comparison succeeds
+    widget.reload()
 
     assert "Cannot reach" in widget.banner.text()
 
@@ -394,6 +417,7 @@ def test_the_banner_clears_once_the_failure_stops(qtbot) -> None:
     widget = AnalyticsView(api)
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
     assert widget.banner.text()
 
     # Recover: the stub stops raising.
@@ -415,6 +439,9 @@ def test_two_failures_are_not_repeated_word_for_word(qtbot) -> None:
     qtbot.addWidget(widget)
 
     widget.load_once("BDT")
+    widget.reload()
+
+    widget.reload()
 
     assert widget.banner.text().count("Cannot reach") == 1
 
@@ -442,6 +469,7 @@ def test_a_failed_trend_does_not_claim_there_was_no_activity(qtbot) -> None:
     widget = AnalyticsView(BothFailingApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.trend_chart.currentIndex() == EMPTY_PAGE
     assert widget.trend_chart.empty_title.text() == "Could not load the trend"
@@ -452,6 +480,7 @@ def test_a_failed_comparison_does_not_claim_there_was_nothing_to_compare(qtbot) 
     widget = AnalyticsView(BothFailingApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert "Could not load the comparison" in widget.comparison_empty.text()
 
@@ -462,6 +491,7 @@ def test_a_genuinely_empty_account_still_says_so(qtbot) -> None:
     widget = AnalyticsView(StubApi(trend_payload=trend((), has_activity=False)))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.trend_chart.empty_title.text() == "No activity in this span"
     assert widget.comparison_empty.text() == "Nothing to compare yet."
@@ -473,6 +503,7 @@ def test_recovering_restores_the_ordinary_wording(qtbot) -> None:
     widget = AnalyticsView(api)
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     widget._api = StubApi(trend_payload=trend((), has_activity=False))
     widget.reload_trend()

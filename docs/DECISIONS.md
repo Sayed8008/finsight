@@ -1128,3 +1128,90 @@ quietly dropping a floor nobody remembers.
 **Rejected:** raising `MIN_REGULARITY`. It would have to go to roughly 0.75 to
 catch these runs, which would also reject genuine subscriptions with ordinary
 weekend jitter — punishing every candidate for a failure specific to a few.
+
+---
+
+## ADR-041 — Lookups are cached for a session; data is fetched every time
+**Date:** 2026-08-15 · **Status:** Accepted
+
+A section view now distinguishes two things it used to conflate:
+
+  * **lookups** — the category list, the payment methods — fetched once, on
+    first open, and kept;
+  * **data** — the transactions, budgets, totals, findings — fetched every time
+    the section is shown.
+
+And every view has a `reset()`, called when the session ends.
+
+**Why, and what went wrong.** `load_once` did both. A screen fetched on its
+first open and never again for the life of the process, which is correct for a
+list of fifteen category names and wrong for everything else: these screens
+describe one account from different angles, so a transaction added on one
+changes the totals on the dashboard, the utilisation on the budgets screen and
+the findings on insights — and none of them knew it had happened. Reported from
+manual testing as "the dashboard still shows the default values after I added a
+budget and some transactions", and reproduced exactly: the server said 1,234.00
+and the dashboard said 0.00 indefinitely.
+
+**Why the same flag was also a data leak.** These widgets are built once and
+outlive a sign-out — the shell swaps which page is shown rather than rebuilding
+the application. So `_loaded` stayed true across sign-out, and the next person
+to sign in navigated to Transactions, hit the early return, and saw the previous
+user's rows. Reproduced with two accounts: Alice's transaction was on screen in
+Bob's session, under Bob's name in the sidebar. The token was correctly cleared
+and the API would have refused the request — the data never left the widget it
+was already in, which is precisely why nothing caught it.
+
+**Why the tests did not catch either.** They asserted the opposite. Six tests
+named `test_opening_twice_does_not_refetch` encoded the caching as intended
+behaviour, because when they were written that was the point — deferring work
+for a screen nobody opens. Nobody revisited them when the application grew a
+second screen that could change the first one's data. A green suite was not
+evidence here; it was six tests agreeing with the bug.
+
+**Cost, and why it is acceptable.** Opening a section is now one request rather
+than none. Against localhost that is single-digit milliseconds, the dashboard
+is deliberately one request by design (ADR-030), and the alternative is a screen
+that quietly lies. The lookups stay cached, so navigating to Transactions costs
+one query rather than three.
+
+**Rejected: invalidating on mutation.** Have each screen announce what it
+changed and have the others listen. That is a correct design and a larger one —
+every mutation would need to know which screens care, and a missed connection
+fails silently in exactly the way this bug already did. Refetching what is about
+to be looked at cannot be forgotten.
+
+---
+
+## ADR-042 — Qt Charts axes are created once, never per render
+**Date:** 2026-08-15 · **Status:** Accepted
+
+`SpendingChart` and `TrendChart` build their axes in `__init__` and update the
+contents on redraw. They do not remove and recreate them.
+
+**Why.** `QChart.removeAllSeries()` deletes the series it owns. `removeAxis()`
+does not — it hands ownership back, and an axis nobody then deletes stays alive
+and stays painted. Every redraw stacked another set of labels and ticks on the
+last: "Rent 60%" printed over "Shopping 50%", four value axes overlapping. The
+chart's own data was correct throughout, so every functional assertion passed.
+
+`deleteLater()` on the removed axis does **not** fix it, which is worth
+recording because it is the obvious first attempt: what lingers is the axis's
+graphics items in the chart's scene, not the axis object.
+
+**Why it was invisible for eight phases.** Nothing ever redrew. Each screen
+fetched once per run (ADR-041), so every chart was built exactly once and the
+second render never happened. The first change that made the dashboard refresh
+made it visible immediately — one defect hiding another, and the reason a fix
+has to be looked at rather than only tested.
+
+**Tested by counting what the scene actually draws,** rendering the same
+breakdown repeatedly and asserting the number of visible items does not grow.
+The same data deliberately, so anything gained is left over rather than an
+honest difference — a longer label or an extra grid line would move that number
+for good reasons.
+
+**Residual, and why it is left alone:** a handful of *invisible* graphics items
+are still retained per redraw. They paint nothing and the count is small; the
+visible defect is what mattered and chasing Qt's internal retention further
+would be work with no observable outcome.

@@ -189,13 +189,26 @@ class BudgetsView(QWidget):
     # ─── Loading ──────────────────────────────────────────────────────────
 
     def load_once(self, currency: str = "") -> None:
-        """Fetch categories and budgets the first time this section is opened."""
+        """The one-off category lookup, the first time this section is opened.
+
+        The budgets themselves are fetched by `reload`, which the shell calls
+        every time the section is shown — utilisation moves whenever a
+        transaction is added anywhere else.
+        """
         self._currency = currency
         if self._loaded:
             return
         self._loaded = True
         self.refresh_categories()
-        self.reload()
+
+    def reset(self) -> None:
+        """Forget this session's data. See `DashboardView.reset`."""
+        self._loaded = False
+        self._currency = ""
+        self._categories = []
+        self._budgets = []
+        self._clear_cards()
+        self.banner.clear_message()
 
     @property
     def is_loaded(self) -> bool:

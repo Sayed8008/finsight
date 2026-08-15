@@ -98,7 +98,7 @@ class Sidebar(QFrame):
         panel = QWidget()
         panel.setObjectName("AccountPanel")
         panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(20, 14, 20, 12)
+        panel_layout.setContentsMargins(16, 14, 16, 14)
         panel_layout.setSpacing(2)
 
         self._account_name = QLabel("")
@@ -109,11 +109,18 @@ class Sidebar(QFrame):
         self._account_email.setObjectName("AccountEmail")
         panel_layout.addWidget(self._account_email)
 
+        # A button, not a link. As a bare blue label directly beneath the email
+        # it read as a third line of account text rather than as an action —
+        # nothing about it said it could be pressed, and it was easy to miss
+        # and easy to hit by accident. Everything else the user can do in this
+        # application is a bordered button, so this is one too.
+        panel_layout.addSpacing(10)
         self._sign_out_button = QPushButton("Sign out")
-        self._sign_out_button.setObjectName("LinkButton")
+        self._sign_out_button.setObjectName("SignOutButton")
         self._sign_out_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sign_out_button.setToolTip("End this session and return to the sign-in screen")
         self._sign_out_button.clicked.connect(self.sign_out_requested.emit)
-        panel_layout.addWidget(self._sign_out_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        panel_layout.addWidget(self._sign_out_button)
 
         return panel
 

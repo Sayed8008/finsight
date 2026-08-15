@@ -78,6 +78,47 @@ class LabelledWidget(QWidget):
         layout.addWidget(widget)
 
 
+#: Methods offered before the account has any history of its own.
+#:
+#: `payment_method` is free text in the database, deliberately — it becomes a
+#: table only if it earns one (see docs/DATABASE.md) — and the API reports the
+#: distinct values a user has actually recorded. That is the right answer for
+#: the *filter* bar, where offering a method nobody has used would return an
+#: empty list, and the wrong one for a *form*: a new account has recorded
+#: nothing, so the picker offered nothing, and the first transaction anyone
+#: ever adds had an empty dropdown.
+#:
+#: These are suggestions, not a vocabulary. The field stays editable and the
+#: server still accepts any string, so nothing here can stop somebody
+#: recording a method that was not thought of.
+SUGGESTED_PAYMENT_METHODS: tuple[str, ...] = (
+    "Cash",
+    "bKash",
+    "Nagad",
+    "Card",
+    "Bank transfer",
+)
+
+
+def payment_method_options(known: list[str] | None = None) -> list[str]:
+    """What to offer in a payment-method picker.
+
+    The account's own methods first, because a value somebody has already used
+    is more likely to be the one they want than a suggestion. Suggestions
+    follow, minus anything already listed — matched case-insensitively, so an
+    account that records "cash" is not offered "Cash" a second line below.
+    """
+    options = list(known or [])
+    seen = {method.strip().lower() for method in options}
+
+    for suggestion in SUGGESTED_PAYMENT_METHODS:
+        if suggestion.lower() not in seen:
+            options.append(suggestion)
+            seen.add(suggestion.lower())
+
+    return options
+
+
 class MessageBanner(QLabel):
     """An inline message above a form.
 

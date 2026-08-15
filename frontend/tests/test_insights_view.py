@@ -70,6 +70,7 @@ def view(qtbot) -> InsightsView:
     widget = InsightsView(StubApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
     return widget
 
 
@@ -93,10 +94,14 @@ def test_opening_fetches_the_insights(view: InsightsView) -> None:
     assert len(cards(view)) == 1
 
 
-def test_opening_twice_does_not_refetch(view: InsightsView) -> None:
+def test_reopening_the_section_fetches_current_data(view: InsightsView) -> None:
+    """Used to assert the opposite. Insights are recomputed on every request
+    and can never be stale on the server (ADR-030) — caching them here is the
+    one way to make them stale, and it is what this screen used to do."""
     view.load_once("BDT")
+    view.reload()
 
-    assert len(api_of(view).calls) == 1
+    assert len(api_of(view).calls) == 2
 
 
 def test_refresh_fetches_again(view: InsightsView) -> None:
@@ -115,6 +120,7 @@ def test_every_explanation_reaches_the_user_intact(qtbot) -> None:
     widget = InsightsView(StubApi(insights((insight(detail=written),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert texts(widget, "InsightDetail") == [written]
 
@@ -124,6 +130,7 @@ def test_the_severity_the_server_sent_is_the_one_used(qtbot) -> None:
     widget = InsightsView(StubApi(insights((insight(severity="warning"),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert cards(widget)[0].property("severity") == "warning"
 
@@ -133,6 +140,7 @@ def test_severity_is_shown_in_words_as_well_as_colour(qtbot) -> None:
     widget = InsightsView(StubApi(insights((insight(severity="critical"),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert texts(widget, "InsightBadge") == [SEVERITY_LABELS["critical"]]
 
@@ -147,6 +155,7 @@ def test_the_order_the_server_sent_is_preserved(qtbot) -> None:
     widget = InsightsView(StubApi(insights(ordered)))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert texts(widget, "InsightTitle") == ["First", "Second", "Third"]
 
@@ -171,6 +180,7 @@ def test_the_summary_counts_what_needs_attention(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.summary_label.text() == "1 of 2 need attention"
 
@@ -179,6 +189,7 @@ def test_only_good_news_is_said_as_such(qtbot) -> None:
     widget = InsightsView(StubApi(insights((insight(severity="good", title="Down"),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert "nothing needs action" in widget.summary_label.text()
 
@@ -187,6 +198,7 @@ def test_no_insights_shows_no_count(view: InsightsView) -> None:
     """ "0 insights" reads as a failure rather than an account in good order."""
     widget = InsightsView(StubApi(insights(())))
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.summary_label.text() == ""
 
@@ -209,6 +221,7 @@ def test_filtering_to_what_needs_attention(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     widget.filter_box.setCurrentIndex(widget.filter_box.findData("attention"))
 
@@ -221,6 +234,7 @@ def test_filtering_to_good_news(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     widget.filter_box.setCurrentIndex(widget.filter_box.findData("good"))
 
@@ -240,6 +254,7 @@ def test_a_filter_matching_nothing_says_so_differently(qtbot) -> None:
     widget = InsightsView(StubApi(insights((insight(severity="good", title="Nice"),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     widget.filter_box.setCurrentIndex(widget.filter_box.findData("attention"))
 
@@ -253,6 +268,7 @@ def test_an_insight_about_a_subscription_links_to_subscriptions(qtbot) -> None:
     widget = InsightsView(StubApi(insights((insight(subscription_id=7),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
     asked: list[str] = []
     widget.navigate_requested.connect(asked.append)
 
@@ -268,6 +284,7 @@ def test_an_insight_about_a_category_links_to_budgets(qtbot) -> None:
     widget = InsightsView(StubApi(insights((insight(category_id=3),))))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget._target_for(insight(category_id=3)) == "budgets"
 
@@ -284,6 +301,7 @@ def test_nothing_found_is_reported_as_good_standing(qtbot) -> None:
     widget = InsightsView(StubApi(insights(())))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.empty_title.text() == "Nothing needs your attention"
     assert cards(widget) == []
@@ -294,6 +312,9 @@ def test_an_unreachable_backend_is_reported_not_crashed(qtbot) -> None:
     qtbot.addWidget(widget)
 
     widget.load_once("BDT")
+    widget.reload()
+
+    widget.reload()
 
     assert "Cannot reach" in widget.banner.text()
     assert widget.empty_title.text() == "Could not load insights"

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QApplication, QPushButton
 
+from client.main import load_stylesheet
 from client.widgets.sidebar import NAV_ITEMS, Sidebar
 
 pytestmark = pytest.mark.gui
@@ -52,3 +55,49 @@ def test_backend_status_text(qtbot, online: bool, expected: str) -> None:
     sidebar.set_backend_status(online=online)
 
     assert sidebar._status.text() == expected
+
+
+# ─── Sign out is an action, and looks like one ────────────────────────────
+#
+# Reported from manual testing as "visually poor / does not appear to sign out".
+# It was a bare blue label directly beneath the email — indistinguishable from
+# the two lines of account text above it, and nothing about it said it could be
+# pressed.
+
+
+def test_sign_out_is_a_button(qtbot) -> None:
+    bar = Sidebar()
+    qtbot.addWidget(bar)
+
+    buttons = bar.findChildren(QPushButton, "SignOutButton")
+
+    assert len(buttons) == 1
+    assert buttons[0].text() == "Sign out"
+
+
+def test_sign_out_asks_the_shell_rather_than_acting(qtbot) -> None:
+    """Ending a session is the shell's job, not a widget's."""
+    bar = Sidebar()
+    qtbot.addWidget(bar)
+
+    with qtbot.waitSignal(bar.sign_out_requested, timeout=500):
+        bar._sign_out_button.click()
+
+
+def test_sign_out_is_drawn_as_a_control(qtbot) -> None:
+    """A border is the whole difference between a label and something that can
+    be pressed, and only the pixels distinguish them (ADR-022, ADR-024)."""
+    app = QApplication.instance()
+    previous = app.styleSheet()
+    app.setStyleSheet(load_stylesheet())
+    try:
+        bar = Sidebar()
+        qtbot.addWidget(bar)
+        bar.set_user("Md. Abu Sayed", "sayed@example.com")
+        bar.show()
+        image = bar._sign_out_button.grab().toImage()
+        edge = image.pixelColor(0, image.height() // 2)
+    finally:
+        app.setStyleSheet(previous)
+
+    assert edge == QColor("#cdd2d9"), "the sign out control has no visible border"

@@ -69,6 +69,23 @@ class TrendChart(QStackedWidget):
         legend.setBackgroundVisible(False)
         legend.setMarkerShape(legend.MarkerShape.MarkerShapeCircle)
 
+        # Created once and reused — see `_rebuild` for why.
+        self._category_axis = QBarCategoryAxis()
+        self._category_axis.setGridLineVisible(False)
+        self._category_axis.setLineVisible(False)
+        self._category_axis.setLabelsColor(LABEL_COLOUR)
+        self._category_axis.setLabelsFont(QFont("", 9))
+        self.chart.addAxis(self._category_axis, Qt.AlignmentFlag.AlignBottom)
+
+        self._value_axis = QValueAxis()
+        self._value_axis.setLabelFormat("%.0f")
+        self._value_axis.setGridLineColor(GRID_COLOUR)
+        self._value_axis.setLineVisible(False)
+        self._value_axis.setLabelsColor(LABEL_COLOUR)
+        self._value_axis.setLabelsFont(QFont("", 9))
+        self._value_axis.setTickCount(5)
+        self.chart.addAxis(self._value_axis, Qt.AlignmentFlag.AlignLeft)
+
         self.view = QChartView(self.chart)
         self.view.setObjectName("TrendChartView")
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -128,9 +145,13 @@ class TrendChart(QStackedWidget):
         self.setCurrentIndex(EMPTY_PAGE)
 
     def _rebuild(self, months: tuple[MonthTotals, ...]) -> None:
+        """Redraw for a span of months, reusing the axes.
+
+        Recreating them each time leaks their graphics items and stacks each
+        render's labels on the last. See `SpendingChart._rebuild`, where the
+        same mistake was found first.
+        """
         self.chart.removeAllSeries()
-        for axis in list(self.chart.axes()):
-            self.chart.removeAxis(axis)
 
         income = QBarSet("Income")
         income.setColor(INCOME_COLOUR)
@@ -155,26 +176,13 @@ class TrendChart(QStackedWidget):
         series.hovered.connect(self._on_hover)
         self.chart.addSeries(series)
 
-        categories = QBarCategoryAxis()
-        categories.append([self._month_label(month, months) for month in months])
-        categories.setGridLineVisible(False)
-        categories.setLineVisible(False)
-        categories.setLabelsColor(LABEL_COLOUR)
-        categories.setLabelsFont(QFont("", 9))
-        self.chart.addAxis(categories, Qt.AlignmentFlag.AlignBottom)
-        series.attachAxis(categories)
+        self._category_axis.clear()
+        self._category_axis.append([self._month_label(month, months) for month in months])
+        series.attachAxis(self._category_axis)
 
-        values = QValueAxis()
-        values.setRange(0, self._axis_maximum(months))
-        values.setLabelFormat("%.0f")
-        values.setGridLineColor(GRID_COLOUR)
-        values.setLineVisible(False)
-        values.setLabelsColor(LABEL_COLOUR)
-        values.setLabelsFont(QFont("", 9))
-        values.setTickCount(5)
-        values.applyNiceNumbers()
-        self.chart.addAxis(values, Qt.AlignmentFlag.AlignLeft)
-        series.attachAxis(values)
+        self._value_axis.setRange(0, self._axis_maximum(months))
+        self._value_axis.applyNiceNumbers()
+        series.attachAxis(self._value_axis)
 
     @staticmethod
     def _month_label(month: MonthTotals, months: tuple[MonthTotals, ...]) -> str:

@@ -150,6 +150,7 @@ def view(qtbot) -> SubscriptionsView:
     widget = SubscriptionsView(StubApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
     return widget
 
 
@@ -283,12 +284,23 @@ def test_opening_the_view_loads_subscriptions(view: SubscriptionsView) -> None:
     assert view._pages.currentIndex() == CARDS_PAGE
 
 
-def test_opening_twice_does_not_refetch(view: SubscriptionsView) -> None:
+def test_reopening_the_section_fetches_current_data(view: SubscriptionsView) -> None:
+    """The defect this replaced: these tests used to assert the opposite.
+
+    A section that fetched once and never again showed whatever was true the
+    first time it was opened. That is wrong for every screen here, because they
+    all describe one account from different angles — a transaction added on one
+    changes what the others should say, and none of them know it happened.
+
+    What is *not* refetched is the one-off lookups: `load_once` still only
+    fetches the category and payment-method lists once.
+    """
     before = len(api_of(view).calls)
 
     view.load_once("BDT")
+    view.reload()
 
-    assert len(api_of(view).calls) == before
+    assert len(api_of(view).calls) == before + 1
 
 
 def test_the_summary_comes_from_the_server_not_the_cards(qtbot) -> None:
@@ -298,6 +310,7 @@ def test_the_summary_comes_from_the_server_not_the_cards(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.monthly_total.text() == "1,234.00 BDT"
     assert widget.yearly_total.text() == "14,808.00 BDT"
@@ -308,6 +321,7 @@ def test_the_summary_mentions_paused_subscriptions(qtbot) -> None:
     widget = SubscriptionsView(StubApi([subscription()], summary(active=2, paused=1)))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.active_total.text() == "2 · 1 paused"
 
@@ -317,6 +331,7 @@ def test_the_summary_names_the_next_renewal(qtbot) -> None:
     widget = SubscriptionsView(StubApi([subscription()], summary(upcoming=upcoming)))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert "Spotify" in widget.next_renewal.text()
     assert "02 Apr" in widget.next_renewal.text()
@@ -326,6 +341,7 @@ def test_no_upcoming_renewal_shows_a_dash(qtbot) -> None:
     widget = SubscriptionsView(StubApi([], summary(active=0, monthly="0.00", yearly="0.00")))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.next_renewal.text() == "—"
 
@@ -372,6 +388,7 @@ def test_nothing_tracked_says_so(qtbot) -> None:
     widget = SubscriptionsView(StubApi([]))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget._pages.currentIndex() == EMPTY_PAGE
     assert widget.empty_title.text() == "Nothing tracked yet"
@@ -381,6 +398,7 @@ def test_no_matches_is_a_different_message(qtbot) -> None:
     widget = SubscriptionsView(StubApi([]))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     widget.due_soon_only.setChecked(True)
 
@@ -392,6 +410,9 @@ def test_an_unreachable_backend_is_reported(qtbot) -> None:
     qtbot.addWidget(widget)
 
     widget.load_once("BDT")
+    widget.reload()
+
+    widget.reload()
 
     assert "Cannot reach" in widget.banner.text()
     assert cards(widget) == []
@@ -673,6 +694,7 @@ def test_a_failed_search_is_reported(qtbot) -> None:
     widget = SubscriptionsView(CannotDetect())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     widget.find_subscriptions()
 

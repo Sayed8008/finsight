@@ -98,7 +98,7 @@ Runs on Linux and Windows.
 
 ## Decisions worth knowing
 
-Forty decisions are recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md),
+Forty-two decisions are recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md),
 each with what was rejected and why. The ones that shaped the most code:
 
 - **Money is `DECIMAL` everywhere, and a JSON *string* on the wire.** A JSON
@@ -223,7 +223,7 @@ screenshot cannot show a screen the application does not produce.
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest              # everything — 1162 tests
+.venv/bin/python -m pytest              # everything — 1179 tests
 .venv/bin/python -m pytest backend      # backend only
 .venv/bin/python -m pytest -m gui       # desktop client only
 ```

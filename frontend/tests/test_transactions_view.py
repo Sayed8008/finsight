@@ -34,6 +34,7 @@ from client.models.transaction_table import (
     TransactionTableModel,
 )
 from client.views.transactions_view import ANY_DATE, EMPTY_PAGE, TABLE_PAGE, TransactionsView
+from client.widgets.forms import payment_method_options
 from client.widgets.import_dialog import ImportDialog
 from client.widgets.transaction_dialog import TransactionDialog
 
@@ -169,6 +170,7 @@ def view(qtbot) -> TransactionsView:
     widget = TransactionsView(StubApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
     return widget
 
 
@@ -313,13 +315,23 @@ def test_opening_the_view_requests_the_first_page(view: TransactionsView) -> Non
     assert call["order"] == "desc"
 
 
-def test_opening_the_view_twice_does_not_refetch(view: TransactionsView) -> None:
-    """Navigating away and back should not re-run the query."""
+def test_reopening_the_section_fetches_current_data(view: TransactionsView) -> None:
+    """The defect this replaced: these tests used to assert the opposite.
+
+    A section that fetched once and never again showed whatever was true the
+    first time it was opened. That is wrong for every screen here, because they
+    all describe one account from different angles — a transaction added on one
+    changes what the others should say, and none of them know it happened.
+
+    What is *not* refetched is the one-off lookups: `load_once` still only
+    fetches the category and payment-method lists once.
+    """
     before = len(api_of(view).calls)
 
     view.load_once("BDT")
+    view.reload()
 
-    assert len(api_of(view).calls) == before
+    assert len(api_of(view).calls) == before + 1
 
 
 def test_the_rows_reach_the_table(view: TransactionsView) -> None:
@@ -468,6 +480,7 @@ def test_sorting_returns_to_the_first_page(qtbot) -> None:
     view = TransactionsView(api)
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
     view.go_to_page(3)
 
     view.table.horizontalHeader().setSortIndicator(AMOUNT, Qt.SortOrder.AscendingOrder)
@@ -482,6 +495,7 @@ def test_the_pager_describes_the_whole_filtered_set(qtbot) -> None:
     view = TransactionsView(StubApi(rows=[transaction()], total=60))
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
 
     assert view.page_label.text() == "Page 1 of 3"
     assert view.count_label.text() == "60 transactions"
@@ -492,6 +506,7 @@ def test_next_and_previous_move_between_pages(qtbot) -> None:
     view = TransactionsView(api)
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
 
     view.next_button.click()
     assert api.last_call["page"] == 2
@@ -504,6 +519,7 @@ def test_previous_is_disabled_on_the_first_page(qtbot) -> None:
     view = TransactionsView(StubApi(rows=[transaction()], total=60))
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
 
     assert not view.previous_button.isEnabled()
     assert view.next_button.isEnabled()
@@ -514,6 +530,7 @@ def test_paging_past_the_end_is_ignored(qtbot) -> None:
     view = TransactionsView(api)
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
     api.reset()
 
     view.go_to_page(99)
@@ -527,6 +544,7 @@ def test_a_filter_change_returns_to_page_one(qtbot) -> None:
     view = TransactionsView(api)
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
     view.go_to_page(3)
     assert api.last_call["page"] == 3
 
@@ -540,6 +558,7 @@ def test_changing_the_page_size_is_sent_and_resets_the_page(qtbot) -> None:
     view = TransactionsView(api)
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
     view.go_to_page(3)
 
     view.page_size_box.setCurrentIndex(view.page_size_box.findData(50))
@@ -555,6 +574,7 @@ def test_an_empty_ledger_says_so(qtbot) -> None:
     view = TransactionsView(StubApi(rows=[], total=0))
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
 
     assert view._pages.currentIndex() == EMPTY_PAGE
     assert view.empty_title.text() == "No transactions yet"
@@ -565,6 +585,7 @@ def test_no_matches_is_a_different_message_from_no_data(qtbot) -> None:
     view = TransactionsView(StubApi(rows=[], total=0))
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
 
     view.type_filter.setCurrentIndex(view.type_filter.findData("income"))
 
@@ -581,6 +602,9 @@ def test_an_unreachable_backend_is_reported_not_crashed(qtbot) -> None:
     qtbot.addWidget(view)
 
     view.load_once("BDT")
+    view.reload()
+
+    view.reload()
 
     assert "Cannot reach" in view.banner.text()
     assert view.model.rowCount() == 0
@@ -591,6 +615,7 @@ def test_edit_and_delete_are_disabled_with_nothing_to_act_on(qtbot) -> None:
     view = TransactionsView(StubApi(rows=[], total=0))
     qtbot.addWidget(view)
     view.load_once("BDT")
+    view.reload()
 
     assert not view.edit_button.isEnabled()
     assert not view.delete_button.isEnabled()
@@ -904,3 +929,76 @@ def test_a_cancelled_import_leaves_the_screen_alone(
     view.open_import(str(path))
 
     assert api_of(view).calls == []
+
+
+# ─── The payment method picker must be usable on a new account ────────────
+#
+# Reported from manual testing: the dropdown opened empty. The list came only
+# from `GET /transactions/payment-methods`, which reports the methods a user
+# has *already* recorded — so on a fresh account it was empty, and the first
+# transaction anybody ever added had nothing to choose from.
+
+
+def test_the_picker_offers_something_on_a_brand_new_account() -> None:
+    assert payment_method_options([]) != []
+    assert "bKash" in payment_method_options([])
+
+
+def test_the_accounts_own_methods_come_first() -> None:
+    """A value somebody has already used beats a suggestion."""
+    options = payment_method_options(["Cheque", "Cash"])
+
+    assert options[:2] == ["Cheque", "Cash"]
+
+
+def test_a_suggestion_already_in_use_is_not_offered_twice() -> None:
+    """Matched case-insensitively, so an account recording "cash" is not
+    offered "Cash" a line below it."""
+    options = payment_method_options(["cash"])
+
+    assert [o for o in options if o.lower() == "cash"] == ["cash"]
+
+
+def test_the_dialog_shows_the_options_on_a_fresh_account(qtbot) -> None:
+    """The bug as the user met it: the dialog itself, with nothing recorded."""
+    dialog = TransactionDialog(CATEGORIES, save=lambda payload: None, payment_methods=[])
+    qtbot.addWidget(dialog)
+
+    items = [dialog.method_box.itemText(i) for i in range(dialog.method_box.count())]
+    selectable = [item for item in items if item.strip()]
+
+    assert selectable, "the payment method dropdown is empty on a new account"
+
+
+def test_a_chosen_method_reaches_the_payload(qtbot) -> None:
+    """Selecting one must actually send it — the half of the report that was
+    already working, kept honest."""
+    dialog = TransactionDialog(CATEGORIES, save=lambda payload: None, payment_methods=[])
+    qtbot.addWidget(dialog)
+    index = dialog.method_box.findText("bKash")
+    dialog.method_box.setCurrentIndex(index)
+
+    assert dialog.payload(Decimal("10.00"))["payment_method"] == "bKash"
+
+
+def test_a_typed_method_still_works(qtbot) -> None:
+    """The list is a convenience, not a vocabulary: the column is free text and
+    the server accepts any string."""
+    dialog = TransactionDialog(CATEGORIES, save=lambda payload: None, payment_methods=[])
+    qtbot.addWidget(dialog)
+    dialog.method_box.setCurrentText("Postal order")
+
+    assert dialog.payload(Decimal("10.00"))["payment_method"] == "Postal order"
+
+
+def test_an_existing_method_is_shown_when_editing(qtbot) -> None:
+    """Even one the account has never otherwise used, so editing a transaction
+    cannot silently change how it was paid for."""
+    existing = transaction(method="Postal order")
+    dialog = TransactionDialog(
+        CATEGORIES, save=lambda payload: None, payment_methods=[], transaction=existing
+    )
+    qtbot.addWidget(dialog)
+
+    assert dialog.method_box.currentText() == "Postal order"
+    assert dialog.payload(Decimal("10.00"))["payment_method"] == "Postal order"

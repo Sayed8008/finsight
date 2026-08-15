@@ -32,7 +32,12 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiError
 from client.api.dto import ACTIVE, CANCELLED, CYCLE_LABELS, PAUSED, Category, Subscription
-from client.widgets.forms import FormField, LabelledWidget, MessageBanner
+from client.widgets.forms import (
+    FormField,
+    LabelledWidget,
+    MessageBanner,
+    payment_method_options,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +136,7 @@ class SubscriptionDialog(QDialog):
         self.method_box.setEditable(True)
         self.method_box.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.method_box.addItem("")
-        self.method_box.addItems(payment_methods or [])
+        self.method_box.addItems(payment_method_options(payment_methods))
         if self.method_box.lineEdit() is not None:
             self.method_box.lineEdit().setPlaceholderText("Card, bKash…")
         layout.addWidget(LabelledWidget("Payment method", self.method_box))

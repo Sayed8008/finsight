@@ -338,11 +338,17 @@ class TransactionsView(QWidget):
     # ─── Loading ──────────────────────────────────────────────────────────
 
     def load_once(self, currency: str = "") -> None:
-        """Fetch the categories and the first page, the first time this is shown.
+        """The one-off lookups, the first time this section is opened.
 
-        Deferred until the section is opened, rather than done at construction:
-        a user who never leaves the dashboard should not pay for a query they
-        never look at, and the login screen should not stall behind one.
+        Deferred until then rather than done at construction: a user who never
+        leaves the dashboard should not pay for a query they never look at, and
+        the login screen should not stall behind one.
+
+        The *rows* are not fetched here — the shell calls `reload` every time
+        the section is shown, so what is on screen is never left over from an
+        earlier visit. Only the category and payment-method lists are cached,
+        because those change rarely and Settings announces it when they do
+        (ADR-037).
         """
         self._currency = currency
         self.model.set_currency(currency)
@@ -350,7 +356,18 @@ class TransactionsView(QWidget):
             return
         self._loaded = True
         self.refresh_categories()
-        self.reload()
+
+    def reset(self) -> None:
+        """Forget this session's data. See `DashboardView.reset`."""
+        self._loaded = False
+        self._currency = ""
+        self._categories = []
+        self._current_page = 1
+        self._page = TransactionPage.empty(PAGE_SIZES[0])
+        self.model.set_rows(())
+        self.banner.clear_message()
+        self.clear_filters_quietly()
+        self._render_page_state()
 
     @property
     def is_loaded(self) -> bool:
@@ -485,6 +502,17 @@ class TransactionsView(QWidget):
 
     def clear_filters(self) -> None:
         """Reset every filter and go back to the first page."""
+        self.clear_filters_quietly()
+        self.reload()
+
+    def clear_filters_quietly(self) -> None:
+        """Reset the controls without asking the server for anything.
+
+        Separate from `clear_filters` because `reset` needs it after sign-out,
+        when there is no token to make a request with — and a request that
+        fails because the session just ended would put an error banner on the
+        screen the next user is about to see.
+        """
         widgets: tuple[QWidget, ...] = (
             self.search_input,
             self.type_filter,
@@ -513,7 +541,6 @@ class TransactionsView(QWidget):
             widget.blockSignals(False)
 
         self._current_page = 1
-        self.reload()
 
     def _on_search_typed(self) -> None:
         self._current_page = 1

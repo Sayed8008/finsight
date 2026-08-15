@@ -78,6 +78,7 @@ def view(qtbot) -> SettingsView:
     widget = SettingsView(StubApi())
     qtbot.addWidget(widget)
     widget.load_once(USER)
+    widget.reload()
     return widget
 
 
@@ -153,6 +154,7 @@ def test_an_account_with_no_categories_says_so(qtbot) -> None:
     widget = SettingsView(StubApi(rows=[]))
     qtbot.addWidget(widget)
     widget.load_once(USER)
+    widget.reload()
 
     assert widget.empty_message.isVisible() is False or "No categories" in (
         widget.empty_message.text()
@@ -165,6 +167,7 @@ def test_a_failed_load_is_not_reported_as_an_empty_account(qtbot) -> None:
     widget = SettingsView(StubApi(error=ApiError("Cannot reach the FinSight backend.")))
     qtbot.addWidget(widget)
     widget.load_once(USER)
+    widget.reload()
 
     assert "Cannot reach" in widget.banner.text()
     assert "Could not load categories" in widget.empty_message.text()
@@ -230,6 +233,7 @@ def test_a_failed_change_is_reported_and_changes_nothing(qtbot) -> None:
     widget = SettingsView(api)
     qtbot.addWidget(widget)
     widget.load_once(USER)
+    widget.reload()
 
     def refuse(category_id: int, **changes: Any) -> Category:
         raise ApiError("That category was not found.")

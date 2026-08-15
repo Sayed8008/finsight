@@ -219,12 +219,24 @@ class SubscriptionsView(QWidget):
     # ─── Loading ──────────────────────────────────────────────────────────
 
     def load_once(self, currency: str = "") -> None:
+        """The one-off lookups. `reload` fetches the subscriptions themselves,
+        and the shell calls it every time this section is shown."""
         self._currency = currency
         if self._loaded:
             return
         self._loaded = True
         self.refresh_categories()
-        self.reload()
+
+    def reset(self) -> None:
+        """Forget this session's data. See `DashboardView.reset`."""
+        self._loaded = False
+        self._currency = ""
+        self._categories = []
+        self._subscriptions = []
+        self._payment_methods = []
+        self._summary = SubscriptionSummary.empty()
+        self._clear_cards()
+        self.banner.clear_message()
 
     @property
     def is_loaded(self) -> bool:

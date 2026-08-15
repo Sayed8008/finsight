@@ -116,6 +116,31 @@ QWidget {
     background-color: transparent;
 }
 
+/* Sign out is an action, so it looks like one. It used to be a bare blue
+ * label sitting directly under the email, which read as a third line of
+ * account text — nothing about it said it could be pressed. Given a border and
+ * its own space, it is unmistakably a control, and unmistakably not the
+ * primary one. */
+#SignOutButton {
+    padding: 8px 12px;
+    border: 1px solid #cdd2d9;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #4a5259;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#SignOutButton:hover {
+    background-color: #fdeceb;
+    border-color: #e39b95;
+    color: #b4232c;
+}
+
+#SignOutButton:pressed {
+    background-color: #f9dedb;
+}
+
 /* ─── Authentication screen ─────────────────────────────────────────────── */
 
 #AuthView {

@@ -123,8 +123,9 @@ class MainView(QWidget):
         self._user = user
         # The dashboard is the landing section, so it is already on screen when
         # this runs — it has to be told to load rather than waiting to be
-        # navigated to.
-        self.dashboard_view.load_once(self._currency, self._display_name)
+        # navigated to. Through the same path as a click, so signing in and
+        # navigating cannot come to mean different things.
+        self._activate(DASHBOARD)
 
     def go_to(self, key: str) -> None:
         """Open a section from somewhere other than the sidebar.
@@ -142,22 +143,61 @@ class MainView(QWidget):
         if index is None:
             return
 
-        # Data is fetched when a section is first opened rather than at
-        # construction: a user who stays on the dashboard should not pay for a
-        # query they never look at.
-        if key == DASHBOARD:
-            self.dashboard_view.load_once(self._currency, self._display_name)
-        elif key == TRANSACTIONS:
-            self.transactions_view.load_once(self._currency)
-        elif key == BUDGETS:
-            self.budgets_view.load_once(self._currency)
-        elif key == SUBSCRIPTIONS:
-            self.subscriptions_view.load_once(self._currency)
-        elif key == ANALYTICS:
-            self.analytics_view.load_once(self._currency)
-        elif key == INSIGHTS:
-            self.insights_view.load_once(self._currency)
-        elif key == SETTINGS:
-            self.settings_view.load_once(self._user)
-
+        self._activate(key)
         self.pages.setCurrentIndex(index)
+
+    def _activate(self, key: str) -> None:
+        """Prepare a section to be looked at.
+
+        Two different things, and conflating them was a real defect. The
+        *lookups* a screen needs — its category list, its payment methods — are
+        fetched once, because a user who never opens a section should not pay
+        for a query they never look at. The *data* is fetched every time,
+        because these screens describe the same account from different angles:
+        a transaction added on one changes the totals on the dashboard, the
+        utilisation on the budgets screen and the findings on insights, none of
+        which know it happened.
+
+        Before this, `load_once` did both, so the dashboard showed whatever was
+        true the first time it was opened and never noticed anything since.
+        """
+        view = self._section_views().get(key)
+        if view is None:
+            return
+
+        if key == DASHBOARD:
+            view.load_once(self._currency, self._display_name)
+        elif key == SETTINGS:
+            view.load_once(self._user)
+        else:
+            view.load_once(self._currency)
+
+        view.reload()
+
+    def _section_views(self) -> dict[str, QWidget]:
+        return {
+            DASHBOARD: self.dashboard_view,
+            TRANSACTIONS: self.transactions_view,
+            BUDGETS: self.budgets_view,
+            SUBSCRIPTIONS: self.subscriptions_view,
+            ANALYTICS: self.analytics_view,
+            INSIGHTS: self.insights_view,
+            SETTINGS: self.settings_view,
+        }
+
+    def reset(self) -> None:
+        """Discard everything belonging to the session that has just ended.
+
+        These widgets are built once and outlive a sign-out — the shell swaps
+        which page is shown rather than rebuilding the application — so without
+        this, one user's transactions stay on screen for the next person to
+        sign in, under their name in the sidebar.
+        """
+        for view in self._section_views().values():
+            view.reset()
+
+        self._currency = ""
+        self._display_name = ""
+        self._user = None
+        self.sidebar.set_user("", "")
+        self.sidebar.select(0)

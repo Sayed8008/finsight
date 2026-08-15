@@ -68,6 +68,24 @@ class SpendingChart(QStackedWidget):
         self.chart.setMargins(QMargins(0, 0, 0, 0))
         self.chart.setAnimationOptions(QChart.AnimationOption.NoAnimation)
 
+        # The axes are created once and reused, not rebuilt per render. See
+        # `_rebuild` for why that matters.
+        self._category_axis = QBarCategoryAxis()
+        self._category_axis.setGridLineVisible(False)
+        self._category_axis.setLineVisible(False)
+        self._category_axis.setLabelsColor(LABEL_COLOUR)
+        self._category_axis.setLabelsFont(QFont("", 9))
+        self.chart.addAxis(self._category_axis, Qt.AlignmentFlag.AlignLeft)
+
+        self._value_axis = QValueAxis()
+        self._value_axis.setLabelFormat("%.0f")
+        self._value_axis.setGridLineColor(GRID_COLOUR)
+        self._value_axis.setLineVisible(False)
+        self._value_axis.setLabelsColor(LABEL_COLOUR)
+        self._value_axis.setLabelsFont(QFont("", 9))
+        self._value_axis.setTickCount(5)
+        self.chart.addAxis(self._value_axis, Qt.AlignmentFlag.AlignBottom)
+
         self.view = QChartView(self.chart)
         self.view.setObjectName("SpendingChartView")
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -112,14 +130,22 @@ class SpendingChart(QStackedWidget):
         self._rebuild(shares)
 
     def _rebuild(self, shares: tuple[CategoryShare, ...]) -> None:
-        """Rebuild the series and axes from scratch.
+        """Redraw for a new breakdown.
 
-        A handful of bars, redrawn a few times a session — rebuilding is
-        simpler than mutating in place and cannot leave a stale bar behind.
+        The series is replaced and the axes are *reused*. An earlier version
+        removed and recreated the axes each time, which looks tidier and leaks:
+        `removeAllSeries` deletes the series it owns, but `removeAxis` only
+        hands ownership back, and an axis nobody then deletes stays alive and
+        stays painted. Every redraw stacked another set of labels and ticks on
+        the last — "Rent 60%" printed over "Shopping 50%" — and `deleteLater`
+        does not help, because what lingers is the axis's graphics items rather
+        than the axis object.
+
+        It went unseen for eight phases because nothing ever redrew: each
+        screen fetched once per run. The first thing that made the dashboard
+        refresh made it visible.
         """
         self.chart.removeAllSeries()
-        for axis in list(self.chart.axes()):
-            self.chart.removeAxis(axis)
 
         # A horizontal bar chart reads bottom-to-top, so the order is reversed
         # to put the largest at the top where the eye starts.
@@ -144,29 +170,16 @@ class SpendingChart(QStackedWidget):
         # be mapped back to the original order rather than used directly.
         self._plotted = tuple(ordered)
 
-        categories = QBarCategoryAxis()
-        categories.append([self._axis_label(share) for share in ordered])
-        categories.setGridLineVisible(False)
-        categories.setLineVisible(False)
-        categories.setLabelsColor(LABEL_COLOUR)
-        categories.setLabelsFont(QFont("", 9))
-        self.chart.addAxis(categories, Qt.AlignmentFlag.AlignLeft)
-        series.attachAxis(categories)
+        self._category_axis.clear()
+        self._category_axis.append([self._axis_label(share) for share in ordered])
+        series.attachAxis(self._category_axis)
 
-        values = QValueAxis()
-        values.setRange(0, self._axis_maximum(shares))
-        values.setLabelFormat("%.0f")
-        values.setGridLineColor(GRID_COLOUR)
-        values.setLineVisible(False)
-        values.setLabelsColor(LABEL_COLOUR)
-        values.setLabelsFont(QFont("", 9))
-        values.setTickCount(5)
+        self._value_axis.setRange(0, self._axis_maximum(shares))
         # Rounds the range and ticks to readable numbers. Without it the axis
         # inherits the 10% headroom and reads 0, 4125, 8250 — arithmetically
         # correct and useless to a person.
-        values.applyNiceNumbers()
-        self.chart.addAxis(values, Qt.AlignmentFlag.AlignBottom)
-        series.attachAxis(values)
+        self._value_axis.applyNiceNumbers()
+        series.attachAxis(self._value_axis)
 
     def _axis_label(self, share: CategoryShare) -> str:
         """Name plus share, so part-to-whole survives the move away from a pie."""

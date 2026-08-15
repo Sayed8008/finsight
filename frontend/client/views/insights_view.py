@@ -160,10 +160,19 @@ class InsightsView(QWidget):
     # ─── Loading ──────────────────────────────────────────────────────────
 
     def load_once(self, currency: str = "") -> None:
-        if self._loaded:
-            return
+        """Insights are recomputed on every request and can never be stale on
+        the server; the client must not make them stale by caching them, so
+        the shell calls `reload` every time this section is shown."""
+        self._currency = currency
         self._loaded = True
-        self.reload()
+
+    def reset(self) -> None:
+        """Forget this session's data. See `DashboardView.reset`."""
+        self._loaded = False
+        self._currency = ""
+        self._insights = Insights.empty()
+        self.banner.clear_message()
+        self._render()
 
     def reload(self) -> None:
         try:

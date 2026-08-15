@@ -10,6 +10,8 @@ backend — they verify interface behaviour, not networking.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from client.api.client import ApiError, ApiUnavailableError
@@ -306,3 +308,76 @@ def test_a_screen_nobody_has_opened_is_not_woken_up(window: MainWindow) -> None:
     window.main_view.settings_view.categories_changed.emit()
 
     assert api.calls == []
+
+
+# ─── Signing out must not leave one user's data for the next ──────────────
+#
+# Reported from manual testing and reproduced against a live backend: Alice
+# signed out, Bob signed in on the same window, and Alice's transactions were
+# still on screen — under Bob's name in the sidebar. The widgets are built once
+# and outlive a sign-out, so nothing was clearing them.
+
+
+def test_signing_out_clears_the_screens(window: MainWindow) -> None:
+    """The bug, at the level it actually happened."""
+    sign_in(window)
+    view = window.main_view
+    view.go_to("transactions")
+    assert view.transactions_view.is_loaded is True
+
+    window.session.log_out()
+
+    assert view.transactions_view.is_loaded is False
+    assert view.transactions_view.model.rowCount() == 0
+    assert view.dashboard_view._dashboard.totals.expense == Decimal("0.00")
+
+
+def test_signing_out_forgets_who_was_signed_in(window: MainWindow) -> None:
+    sign_in(window)
+
+    window.session.log_out()
+
+    assert window.main_view._user is None
+    assert window.main_view._currency == ""
+
+
+def test_signing_in_again_fetches_rather_than_reusing(window: MainWindow) -> None:
+    """The mechanism behind the leak: every section was marked loaded, so the
+    next session's navigation returned early and showed the old data."""
+    sign_in(window)
+    window.main_view.go_to("transactions")
+    window.session.log_out()
+
+    sign_in(window)
+    api = window.main_view._api
+    api.calls.clear()
+    window.main_view.go_to("transactions")
+
+    assert "transactions" in api.calls
+
+
+def test_signing_out_returns_to_the_first_section(window: MainWindow) -> None:
+    """Otherwise the next user lands wherever the last one happened to be."""
+    sign_in(window)
+    window.main_view.go_to("settings")
+
+    window.session.log_out()
+
+    assert window.main_view.sidebar.current_key() == "dashboard"
+
+
+# ─── The dashboard must not show what was true an hour ago ────────────────
+
+
+def test_opening_the_dashboard_refetches_it(window: MainWindow) -> None:
+    """Reported from manual testing: a budget and transactions were added and
+    the dashboard went on showing its opening figures. It fetched once per
+    application run and never again."""
+    sign_in(window)
+    api = window.main_view._api
+    window.main_view.go_to("transactions")
+    api.calls.clear()
+
+    window.main_view.go_to("dashboard")
+
+    assert "dashboard" in api.calls

@@ -107,6 +107,7 @@ def view(qtbot) -> BudgetsView:
     widget = BudgetsView(StubApi())
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
     return widget
 
 
@@ -203,18 +204,30 @@ def test_opening_the_view_requests_budgets(view: BudgetsView) -> None:
     assert len(api_of(view).calls) == 1
 
 
-def test_opening_the_view_twice_does_not_refetch(view: BudgetsView) -> None:
+def test_reopening_the_section_fetches_current_data(view: BudgetsView) -> None:
+    """The defect this replaced: these tests used to assert the opposite.
+
+    A section that fetched once and never again showed whatever was true the
+    first time it was opened. That is wrong for every screen here, because they
+    all describe one account from different angles — a transaction added on one
+    changes what the others should say, and none of them know it happened.
+
+    What is *not* refetched is the one-off lookups: `load_once` still only
+    fetches the category and payment-method lists once.
+    """
     before = len(api_of(view).calls)
 
     view.load_once("BDT")
+    view.reload()
 
-    assert len(api_of(view).calls) == before
+    assert len(api_of(view).calls) == before + 1
 
 
 def test_one_card_per_budget(qtbot) -> None:
     widget = BudgetsView(StubApi([budget(id=1), budget(id=2), budget(id=3)]))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert len(cards(widget)) == 3
     assert widget._pages.currentIndex() == CARDS_PAGE
@@ -232,11 +245,13 @@ def test_the_count_is_shown_and_pluralised(qtbot) -> None:
     one = BudgetsView(StubApi([budget()]))
     qtbot.addWidget(one)
     one.load_once("BDT")
+    one.reload()
     assert one.count_label.text() == "1 budget"
 
     many = BudgetsView(StubApi([budget(id=1), budget(id=2)]))
     qtbot.addWidget(many)
     many.load_once("BDT")
+    many.reload()
     assert many.count_label.text() == "2 budgets"
 
 
@@ -254,6 +269,7 @@ def test_the_summary_totals_the_cards_on_screen(qtbot) -> None:
     )
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.total_budgeted.text() == "8,000.00 BDT"
     assert widget.total_spent.text() == "3,500.00 BDT"
@@ -265,6 +281,7 @@ def test_summary_totals_stay_exact(qtbot) -> None:
     widget = BudgetsView(StubApi([budget(id=i, amount="0.10", spent="0.00") for i in range(10)]))
     qtbot.addWidget(widget)
     widget.load_once("")
+    widget.reload()
 
     assert widget.total_budgeted.text() == "1.00"
 
@@ -273,6 +290,7 @@ def test_an_overspent_total_is_flagged(qtbot) -> None:
     widget = BudgetsView(StubApi([budget(amount="1000.00", spent="1500.00", status="exceeded")]))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget.total_remaining.text() == "-500.00 BDT"
     assert widget.total_remaining.property("status") == "exceeded"
@@ -282,6 +300,7 @@ def test_the_summary_hides_when_there_is_nothing_to_total(qtbot) -> None:
     widget = BudgetsView(StubApi([]))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert not widget.summary.isVisible()
 
@@ -326,6 +345,7 @@ def test_no_budgets_says_so(qtbot) -> None:
     widget = BudgetsView(StubApi([]))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     assert widget._pages.currentIndex() == EMPTY_PAGE
     assert widget.empty_title.text() == "No budgets yet"
@@ -335,6 +355,7 @@ def test_no_matches_is_a_different_message_from_no_data(qtbot) -> None:
     widget = BudgetsView(StubApi([]))
     qtbot.addWidget(widget)
     widget.load_once("BDT")
+    widget.reload()
 
     widget.current_only.setChecked(True)
 
@@ -347,6 +368,9 @@ def test_an_unreachable_backend_is_reported_not_crashed(qtbot) -> None:
     qtbot.addWidget(widget)
 
     widget.load_once("BDT")
+    widget.reload()
+
+    widget.reload()
 
     assert "Cannot reach" in widget.banner.text()
     assert cards(widget) == []
