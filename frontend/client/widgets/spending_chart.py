@@ -35,7 +35,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QPainter
 from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import CategoryShare
-from client.core.animation import configure_chart
+from client.core.animation import configure_bar_chart
 from client.core.formatting import percentage_text
 
 #: The single hue every bar is drawn in — the interface's primary blue.
@@ -43,8 +43,8 @@ BAR_COLOUR = QColor("#1a56c4")
 # The folded "Other categories" row needs no colour of its own: its label says
 # what it is, and a second fill would imply it is a category like the others.
 
-GRID_COLOUR = QColor("#eef0f3")
-LABEL_COLOUR = QColor("#6b7480")
+GRID_COLOUR = QColor("#f2f4f7")
+LABEL_COLOUR = QColor("#8b939c")
 
 CHART_PAGE = 0
 EMPTY_PAGE = 1
@@ -68,11 +68,9 @@ class SpendingChart(QStackedWidget):
         self.chart.setBackgroundVisible(False)
         self.chart.setPlotAreaBackgroundVisible(False)
         self.chart.setMargins(QMargins(0, 0, 0, 0))
-        # Bars grow to their values when the breakdown is drawn. QtCharts
-        # animates the series without touching the chart's series or axis
-        # lists, which is why it is used rather than anything hand-rolled:
-        # this chart has already shipped one accumulation bug.
-        configure_chart(self.chart)
+        # Bar motion is configured per rebuild, in `_rebuild`, because its
+        # duration scales with how many bars there are.
+        configure_bar_chart(self.chart, 0)
 
         # The axes are created once and reused, not rebuilt per render. See
         # `_rebuild` for why that matters.
@@ -164,6 +162,7 @@ class SpendingChart(QStackedWidget):
         refresh made it visible.
         """
         self.chart.removeAllSeries()
+        configure_bar_chart(self.chart, len(shares))
 
         # A horizontal bar chart reads bottom-to-top, so the order is reversed
         # to put the largest at the top where the eye starts.

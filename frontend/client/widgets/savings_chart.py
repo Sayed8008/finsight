@@ -29,12 +29,19 @@ from PySide6.QtCharts import (
     QScatterSeries,
     QValueAxis,
 )
-from PySide6.QtCore import QMargins, QPointF, Qt
+from PySide6.QtCore import QMargins, QPointF, QPropertyAnimation, Qt
 from PySide6.QtGui import QColor, QCursor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import SavingsMonth
-from client.core.animation import configure_chart
+from client.core.animation import (
+    POINT_SETTLE_MS,
+    SETTLE_EASING,
+    animations_enabled,
+    configure_line_chart,
+    delayed,
+    line_chart_ms,
+)
 
 #: The line itself — the interface's primary blue, as used by every other
 #: single-series chart here.
@@ -44,8 +51,8 @@ LINE_COLOUR = QColor("#1a56c4")
 DEFICIT_COLOUR = QColor("#b4232c")
 ZERO_LINE_COLOUR = QColor("#c9cfd6")
 
-GRID_COLOUR = QColor("#eef0f3")
-LABEL_COLOUR = QColor("#6b7480")
+GRID_COLOUR = QColor("#f2f4f7")
+LABEL_COLOUR = QColor("#8b939c")
 
 CHART_PAGE = 0
 EMPTY_PAGE = 1
@@ -60,6 +67,9 @@ NO_HISTORY_MESSAGE = (
 #: frame. A share of the range rather than a fixed amount, because the amounts
 #: here span from hundreds to hundreds of thousands.
 HEADROOM = Decimal("0.15")
+
+#: Point marker diameter. Named because the settle animation grows to it.
+MARKER_SIZE = 9.0
 
 
 class SavingsChart(QStackedWidget):
@@ -78,11 +88,8 @@ class SavingsChart(QStackedWidget):
         self.chart.setBackgroundVisible(False)
         self.chart.setPlotAreaBackgroundVisible(False)
         self.chart.setMargins(QMargins(0, 0, 0, 0))
-        # The line draws itself, and re-draws when the range changes. Kept
-        # to a single short animation on the series — the panel no longer
-        # fades the chart as well, because two transitions over the same
-        # pixels read as a stutter rather than as one movement.
-        configure_chart(self.chart)
+        # Set per rebuild, where the number of points is known.
+        configure_line_chart(self.chart, 0)
 
         # Created once and reused. A *category* axis, so each tick can be
         # named with its month: a value axis formats labels from the number,
@@ -174,6 +181,7 @@ class SavingsChart(QStackedWidget):
         """
         self.chart.removeAllSeries()
         self._plotted = months
+        configure_line_chart(self.chart, len(months))
 
         line = QLineSeries()
         line.setPen(QPen(LINE_COLOUR, 2))
@@ -184,7 +192,7 @@ class SavingsChart(QStackedWidget):
         # draw nothing at all for it. The markers carry the values in every
         # case, so one month renders as one dot rather than an empty frame.
         markers = QScatterSeries()
-        markers.setMarkerSize(9.0)
+        markers.setMarkerSize(MARKER_SIZE)
         markers.setColor(LINE_COLOUR)
         markers.setBorderColor(Qt.GlobalColor.white)
         for index, month in enumerate(months):
@@ -192,7 +200,7 @@ class SavingsChart(QStackedWidget):
         markers.hovered.connect(self._on_hover)
 
         deficits = QScatterSeries()
-        deficits.setMarkerSize(9.0)
+        deficits.setMarkerSize(MARKER_SIZE)
         deficits.setColor(DEFICIT_COLOUR)
         deficits.setBorderColor(Qt.GlobalColor.white)
         for index, month in enumerate(months):
@@ -205,12 +213,53 @@ class SavingsChart(QStackedWidget):
             series.attachAxis(self._month_axis)
             series.attachAxis(self._value_axis)
 
+        # The markers settle *after* the line has been drawn, rather than
+        # travelling along with it. Splitting the two is the whole reason the
+        # points are a separate scatter series: a line that arrives and then
+        # gathers its points reads as data landing on a trend, while dots
+        # sliding in formation reads as a single object being dragged on.
+        #
+        self._settle_markers((markers, deficits))
+
         self._month_axis.setRange(-0.35, max(len(months) - 1, 0) + 0.35)
         self._apply_month_labels(months)
 
         low, high = self._value_range(months)
         self._value_axis.setRange(low, high)
         self._value_axis.applyNiceNumbers()
+
+    def _settle_markers(self, series: tuple[QScatterSeries, ...]) -> None:
+        """Grow the point markers once the line has had time to reach them.
+
+        `markerSize` is animated on the scatter series itself — two animations
+        for the whole chart, not one per point. Twenty-four separate marker
+        animations would be twenty-four objects and twenty-four repaint
+        sources for a difference nobody could see.
+
+        The markers start at nothing and land with a slight overshoot, so the
+        points appear to settle onto a line that has already arrived rather
+        than sliding in formation with it. That separation is the entire
+        reason the points are their own series.
+        """
+        if not animations_enabled():
+            for item in series:
+                item.setMarkerSize(MARKER_SIZE)
+            return
+
+        # Held at zero until the line is nearly complete, then grown. A key
+        # value rather than a timer: the animation is parented to the series
+        # and dies with it, so a redraw mid-flight leaves nothing pending.
+        hold = max(line_chart_ms(len(self._plotted)) - POINT_SETTLE_MS, 0)
+        for item in series:
+            item.setMarkerSize(0.0)
+            animation = QPropertyAnimation(item, b"markerSize", item)
+            animation.setDuration(POINT_SETTLE_MS)
+            animation.setStartValue(0.0)
+            animation.setEndValue(MARKER_SIZE)
+            animation.setEasingCurve(SETTLE_EASING)
+            delayed(animation, hold, item).start(
+                QPropertyAnimation.DeletionPolicy.DeleteWhenStopped
+            )
 
     def _apply_month_labels(self, months: tuple[SavingsMonth, ...]) -> None:
         """Name the ticks, thinned so they fit and never repeat.

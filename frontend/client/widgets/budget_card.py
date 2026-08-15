@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from client.api.dto import Budget
+from client.core.animation import fill_progress
 
 #: A progress bar cannot show 150%. The bar is capped and the real figure is
 #: printed beside it, so an overspend is visible as a full red bar *and* as a
@@ -115,12 +116,31 @@ class BudgetCard(QFrame):
         self.bar = QProgressBar()
         self.bar.setObjectName("BudgetBar")
         self.bar.setRange(0, BAR_MAXIMUM)
-        self.bar.setValue(min(BAR_MAXIMUM, int(self.budget.percentage_used)))
+        # The true value, always. `animate_bar` returns the bar to zero and
+        # fills it when the view asks — so a card that is never animated, or
+        # one built with animations disabled, still shows the right figure.
+        # A bar left empty because nobody called the animation would be a
+        # correctness bug caused by decoration.
+        self.bar.setValue(self._bar_value())
         self.bar.setTextVisible(False)
         self.bar.setFixedHeight(8)
         # Read by the stylesheet to colour the chunk green, amber or red.
         self.bar.setProperty("status", self.budget.status)
         return self.bar
+
+    def animate_bar(self, *, delay_ms: int = 0) -> None:
+        """Fill the bar to this budget's share of its limit.
+
+        Called by the view rather than done on construction, because a widget
+        has no geometry until it is laid out and because the stagger between
+        cards is the view's business — a card cannot know it is the third one.
+        """
+        fill_progress(self.bar, self._bar_value(), delay_ms=delay_ms)
+
+    def _bar_value(self) -> int:
+        """The share to show, capped. A bar cannot render 150%; the figure
+        beside it is not capped, which is where the real number is read."""
+        return min(BAR_MAXIMUM, int(self.budget.percentage_used))
 
     # ─── Figures ──────────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -39,6 +39,12 @@ CARDS_PAGE = 0
 EMPTY_PAGE = 1
 
 ZERO = Decimal("0.00")
+
+#: How far apart consecutive budget bars begin filling, and the most any one
+#: card will wait. Small enough to read as one movement across the list rather
+#: than as a queue.
+BAR_STAGGER_MS = 55
+BAR_STAGGER_CAP_MS = 260
 
 
 class BudgetsView(QWidget):
@@ -271,6 +277,7 @@ class BudgetsView(QWidget):
         """
         self._clear_cards()
 
+        cards: list[BudgetCard] = []
         for budget in self._budgets:
             card = BudgetCard(budget, currency=self._currency)
             card.edit_requested.connect(self.edit_budget)
@@ -278,6 +285,7 @@ class BudgetsView(QWidget):
             # Inserted before the trailing stretch, so cards stack from the top
             # instead of spreading down the page.
             self._card_layout.insertWidget(self._card_layout.count() - 1, card)
+            cards.append(card)
 
         self._pages.setCurrentIndex(CARDS_PAGE if self._budgets else EMPTY_PAGE)
         if not self._budgets:
@@ -285,6 +293,28 @@ class BudgetsView(QWidget):
 
         count = len(self._budgets)
         self.count_label.setText(f"{count} budget{'s' if count != 1 else ''}" if count else "")
+
+        # Filled on the next turn of the event loop, not here: `_activate`
+        # runs before the shell switches to this page, so at this moment the
+        # cards have no geometry and are not on screen. A fill nobody can see
+        # is a fill that has already finished by the time they look.
+        QTimer.singleShot(0, lambda: self._fill_bars(cards))
+
+    def _fill_bars(self, cards: list[BudgetCard]) -> None:
+        """Grow each card's bar, one just after the last.
+
+        The stagger is deliberately small — 55ms — and capped, so a screen of
+        ten budgets still finishes filling in about the time one card takes.
+        Cards arriving in sequence reads as a list being drawn; cards arriving
+        together reads as a single flash, and cards arriving half a second
+        apart reads as waiting.
+        """
+        for index, card in enumerate(cards):
+            try:
+                card.animate_bar(delay_ms=min(index * BAR_STAGGER_MS, BAR_STAGGER_CAP_MS))
+            except RuntimeError:
+                # The card was destroyed by a reload before the timer fired.
+                return
 
     def _clear_cards(self) -> None:
         for index in reversed(range(self._card_layout.count())):

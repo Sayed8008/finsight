@@ -23,15 +23,15 @@ from PySide6.QtGui import QColor, QCursor, QFont, QPainter
 from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import MonthTotals
-from client.core.animation import configure_chart
+from client.core.animation import configure_bar_chart
 
 #: A colour-vision-safe pair, verified rather than assumed. Deliberately not
 #: the green/red used for signed amounts — see the module docstring.
 INCOME_COLOUR = QColor("#1a56c4")
 EXPENSE_COLOUR = QColor("#d9782e")
 
-GRID_COLOUR = QColor("#eef0f3")
-LABEL_COLOUR = QColor("#6b7480")
+GRID_COLOUR = QColor("#f2f4f7")
+LABEL_COLOUR = QColor("#8b939c")
 
 CHART_PAGE = 0
 EMPTY_PAGE = 1
@@ -58,9 +58,8 @@ class TrendChart(QStackedWidget):
         self.chart.setBackgroundVisible(False)
         self.chart.setPlotAreaBackgroundVisible(False)
         self.chart.setMargins(QMargins(0, 0, 0, 0))
-        # Grouped bars grow into place on first draw and on every span
-        # change. See `configure_chart` for why the animation is Qt's own.
-        configure_chart(self.chart)
+        # Set per rebuild, where the number of months is known.
+        configure_bar_chart(self.chart, 0)
 
         # Two series, so a legend is not optional: without it the colours mean
         # nothing, and colour would be the only thing telling them apart.
@@ -155,6 +154,8 @@ class TrendChart(QStackedWidget):
         same mistake was found first.
         """
         self.chart.removeAllSeries()
+        # Two bars per month, so the visual density is twice the month count.
+        configure_bar_chart(self.chart, len(months) * 2)
 
         income = QBarSet("Income")
         income.setColor(INCOME_COLOUR)
