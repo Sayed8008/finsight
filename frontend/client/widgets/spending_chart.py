@@ -35,6 +35,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QPainter
 from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import CategoryShare
+from client.core.formatting import percentage_text
 
 #: The single hue every bar is drawn in — the interface's primary blue.
 BAR_COLOUR = QColor("#1a56c4")
@@ -123,11 +124,23 @@ class SpendingChart(QStackedWidget):
         self._shares = shares
 
         if not shares:
+            # Cleared, not merely hidden. Switching to the empty page and
+            # returning left the previous breakdown loaded underneath it —
+            # bars, axis labels and the tooltips naming each category. Signing
+            # out goes through here, so one person's categories and amounts
+            # stayed in the widget while the next person used it.
+            self._clear()
             self.setCurrentIndex(EMPTY_PAGE)
             return
 
         self.setCurrentIndex(CHART_PAGE)
         self._rebuild(shares)
+
+    def _clear(self) -> None:
+        """Drop the plotted data, leaving the axes in place to be reused."""
+        self.chart.removeAllSeries()
+        self._category_axis.clear()
+        self._plotted = ()
 
     def _rebuild(self, shares: tuple[CategoryShare, ...]) -> None:
         """Redraw for a new breakdown.
@@ -183,7 +196,7 @@ class SpendingChart(QStackedWidget):
 
     def _axis_label(self, share: CategoryShare) -> str:
         """Name plus share, so part-to-whole survives the move away from a pie."""
-        return f"{share.name}  {share.percentage:.0f}%"
+        return f"{share.name}  {percentage_text(share.percentage)}%"
 
     @staticmethod
     def _axis_maximum(shares: tuple[CategoryShare, ...]) -> float:
@@ -212,7 +225,7 @@ class SpendingChart(QStackedWidget):
 
         share = self._plotted[index]
         figure = f"{share.total:,.2f} {self._currency}".strip()
-        return f"{share.name} · {figure} · {share.percentage:.0f}% of spending"
+        return f"{share.name} · {figure} · {percentage_text(share.percentage)}% of spending"
 
     # ─── For tests ────────────────────────────────────────────────────────
 

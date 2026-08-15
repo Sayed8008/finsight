@@ -172,6 +172,57 @@ def test_sign_out_survives_an_unreachable_backend(qtbot) -> None:
     assert window._api.token is None
 
 
+# ─── The confirmation dialog, pressed for real ────────────────────────────
+#
+# Reported from manual testing: "Sign out" opened the dialog, "Yes" did
+# nothing at all. Every test above calls `session.log_out()` directly, so the
+# dialog — the only thing a user can actually reach — went unexercised, and
+# the suite passed while the feature did not work.
+#
+# These press the real button in the real dialog, via the `answer_confirmation`
+# fixture in conftest. Stubbing `QMessageBox.question` would not do: the bug
+# *was* in what that function returns, so a stub inventing a return value would
+# reproduce the false pass rather than the fault.
+
+
+def test_confirming_the_dialog_actually_signs_out(window: MainWindow, answer_confirmation) -> None:
+    """The bug: the dialog appeared, Yes was pressed, and nothing happened."""
+    sign_in(window)
+
+    asked = answer_confirmation(window._confirm_sign_out, "Yes")
+
+    assert asked == "Sign out of FinSight?"
+    assert window.current_page() == AUTH_PAGE
+    assert not window.session.is_authenticated
+    assert window._api.token is None
+    assert "logout" in window._api.calls
+
+
+def test_confirming_the_dialog_resets_the_screens(window: MainWindow, answer_confirmation) -> None:
+    """Signing out through the dialog must clear as much as calling it directly."""
+    sign_in(window)
+    window.main_view.go_to("transactions")
+
+    answer_confirmation(window._confirm_sign_out, "Yes")
+
+    assert window.main_view._user is None
+    assert window.main_view.transactions_view.is_loaded is False
+
+
+def test_cancelling_the_dialog_leaves_the_user_signed_in(
+    window: MainWindow, answer_confirmation
+) -> None:
+    """The other half of the fix: Cancel must not be treated as a yes."""
+    sign_in(window)
+
+    answer_confirmation(window._confirm_sign_out, "Cancel")
+
+    assert window.current_page() == APP_PAGE
+    assert window.session.is_authenticated
+    assert window._api.token == TOKEN.access_token
+    assert "logout" not in window._api.calls
+
+
 # ─── Authentication view ──────────────────────────────────────────────────
 
 

@@ -6,7 +6,7 @@ claim in ADR-003 that amounts survive a round trip through JSON unchanged.
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -15,8 +15,10 @@ from app.core.money import (
     MoneyOut,
     NonNegativeMoney,
     PositiveMoney,
+    percent_text,
     percentage_of,
     quantise,
+    share_text,
     to_wire,
 )
 
@@ -131,3 +133,60 @@ def test_more_than_two_decimal_places_is_rejected() -> None:
 def test_an_amount_too_large_for_the_column_is_rejected() -> None:
     with pytest.raises(ValidationError):
         Amounts(positive=Decimal("1234567890123.00"))
+
+
+# ─── Percentages in a sentence ────────────────────────────────────────────
+#
+# The insight rules used `f"{value:.0f}"` to put a percentage into prose. That
+# is wrong for a Decimal twice over: it formats through the decimal context,
+# whose default is ROUND_HALF_EVEN, so 12.50 printed as "12" while 37.50
+# printed as "38" — the same half rounded in two directions.
+
+
+def test_percent_text_rounds_halves_up_not_to_even() -> None:
+    """The defect, at the level it happened. Under the old `:.0f` the first
+    three of these came out 12, 2 and 62 — rounded down to an even digit."""
+    assert percent_text(Decimal("12.50")) == "13"
+    assert percent_text(Decimal("2.50")) == "3"
+    assert percent_text(Decimal("62.50")) == "63"
+    assert percent_text(Decimal("37.50")) == "38"
+
+
+def test_percent_text_agrees_with_quantise_about_halves() -> None:
+    """A figure rounded for a sentence must round the way money does."""
+    for hundredths in range(0, 20001):
+        value = Decimal(hundredths) / Decimal("100")
+        assert Decimal(percent_text(value)) == value.quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
+
+
+def test_percent_text_does_not_cap() -> None:
+    """A percentage *change* is not a share. A category that went from 28,000
+    to 214,000 is up 664%, and 664 is the number worth reading."""
+    assert percent_text(Decimal("664.29")) == "664"
+    assert percent_text(Decimal("150.00")) == "150"
+
+
+# ─── Shares are bounded ───────────────────────────────────────────────────
+
+
+def test_share_text_never_exceeds_one_hundred() -> None:
+    """A part cannot be more than the whole it is a part of. The subscription
+    rule weighs a *monthly* total against a period that may be half over, so
+    "166% of the 3,000.00 you spent" was reachable and read as nonsense."""
+    assert share_text(Decimal("166.67")) == "100"
+    assert share_text(Decimal("100.00")) == "100"
+    assert share_text(Decimal("1000.00")) == "100"
+
+
+def test_share_text_leaves_ordinary_shares_alone() -> None:
+    assert share_text(Decimal("87.50")) == "88"
+    assert share_text(Decimal("0.00")) == "0"
+    assert share_text(Decimal("99.49")) == "99"
+
+
+def test_capping_is_display_only_and_percentage_of_still_reports_the_truth() -> None:
+    """The value still ranks one insight against another; only the sentence is
+    bounded, so nothing is reordered by how it happens to read."""
+    assert percentage_of(Decimal("5000.00"), Decimal("3000.00")) == Decimal("166.67")

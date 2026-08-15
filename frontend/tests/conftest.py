@@ -22,3 +22,45 @@ def _select_qt_platform() -> None:
 
 
 _select_qt_platform()
+
+import pytest  # noqa: E402  (must follow the platform selection above)
+
+
+@pytest.fixture
+def answer_confirmation():
+    """Press a button in the next confirmation dialog that opens.
+
+    Returns a callable: `answer_confirmation(action, "Yes")` runs `action` and
+    clicks Yes in the `QMessageBox` it opens, returning the dialog's text so a
+    test can check the user was asked about the right record.
+
+    Every confirmation in this application is modal and blocks inside
+    `QMessageBox.question`, so the click has to be queued first and delivered
+    from the event loop once the dialog is up.
+
+    Tests use this rather than monkeypatching `QMessageBox.question`, because
+    the bug these exist to catch *was* in that function's return value: a stub
+    returning a `StandardButton` member would have made the broken `is`
+    comparison pass and reported a working delete that deleted nothing.
+    """
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    def answer(action, button: str = "Yes") -> str:
+        standard = getattr(QMessageBox.StandardButton, button)
+        seen: list[str] = []
+
+        def click() -> None:
+            for widget in QApplication.topLevelWidgets():
+                if isinstance(widget, QMessageBox) and widget.isVisible():
+                    seen.append(widget.text())
+                    widget.button(standard).click()
+                    return
+
+        QTimer.singleShot(0, click)
+        action()
+
+        assert seen, "no confirmation dialog appeared"
+        return seen[0]
+
+    return answer

@@ -74,6 +74,8 @@ class MainView(QWidget):
         self.insights_view.navigate_requested.connect(self.go_to)
         self.settings_view = SettingsView(api_client)
         self.settings_view.categories_changed.connect(self.refresh_categories)
+        # An import can create categories too, and the same pickers need telling.
+        self.transactions_view.categories_changed.connect(self.refresh_categories)
 
         self.pages = QStackedWidget()
         self.pages.setObjectName("ContentArea")

@@ -379,23 +379,18 @@ def test_an_unreachable_backend_is_reported_not_crashed(qtbot) -> None:
 # ─── Deleting ─────────────────────────────────────────────────────────────
 
 
-def test_deleting_asks_first_and_does_nothing_if_declined(view: BudgetsView, monkeypatch) -> None:
-    from PySide6.QtWidgets import QMessageBox
-
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Cancel)
-
-    view.delete_budget(1)
+def test_deleting_asks_first_and_does_nothing_if_declined(
+    view: BudgetsView, answer_confirmation
+) -> None:
+    answer_confirmation(lambda: view.delete_budget(1), "Cancel")
 
     assert api_of(view).deleted == []
 
 
-def test_confirming_deletes_and_reloads(view: BudgetsView, monkeypatch) -> None:
-    from PySide6.QtWidgets import QMessageBox
-
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+def test_confirming_deletes_and_reloads(view: BudgetsView, answer_confirmation) -> None:
     api_of(view).reset()
 
-    view.delete_budget(1)
+    answer_confirmation(lambda: view.delete_budget(1), "Yes")
 
     assert api_of(view).deleted == [1]
     assert len(api_of(view).calls) == 1

@@ -177,34 +177,19 @@ def test_a_failed_load_is_not_reported_as_an_empty_account(qtbot) -> None:
 
 
 def test_retiring_asks_first_and_says_it_is_not_a_delete(
-    view: SettingsView, monkeypatch
+    view: SettingsView, answer_confirmation
 ) -> None:
     """Somebody expecting a delete needs to know the history stays put."""
-    asked: list[str] = []
+    asked = answer_confirmation(lambda: view.retire_category(CATEGORIES[1]), "Cancel")
 
-    def fake_question(parent, title, text, *args, **kwargs):
-        asked.append(text)
-        from PySide6.QtWidgets import QMessageBox
-
-        return QMessageBox.StandardButton.Cancel
-
-    monkeypatch.setattr("client.views.settings_view.QMessageBox.question", fake_question)
-
-    view.retire_category(CATEGORIES[1])
-
-    assert "not a delete" in asked[0]
+    assert "not a delete" in asked
     assert api_of(view).updated == []
 
 
-def test_retiring_deactivates_rather_than_deleting(view: SettingsView, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "client.views.settings_view.QMessageBox.question",
-        lambda *args, **kwargs: __import__(
-            "PySide6.QtWidgets", fromlist=["QMessageBox"]
-        ).QMessageBox.StandardButton.Yes,
-    )
-
-    view.retire_category(CATEGORIES[1])
+def test_retiring_deactivates_rather_than_deleting(
+    view: SettingsView, answer_confirmation
+) -> None:
+    answer_confirmation(lambda: view.retire_category(CATEGORIES[1]), "Yes")
 
     assert api_of(view).updated == [(2, {"is_active": False})]
 
@@ -384,3 +369,54 @@ def test_the_add_button_is_actually_painted(qtbot) -> None:
         app.setStyleSheet(previous)
 
     assert fill == QColor("#1a56c4"), "the primary button is painted in nothing"
+
+
+# ─── Signing out ──────────────────────────────────────────────────────────
+#
+# `reset` runs on sign-out, after `Session.log_out` has already discarded the
+# token. Unticking "Show retired" fires `stateChanged`, which is wired to
+# `reload` — so signing out issued a categories request with no credentials,
+# got a 401, and left "Could not load categories. Not authenticated" on the
+# screen the next person signs in to. Same reasoning as
+# `TransactionsView.clear_filters_quietly`.
+
+
+def test_resetting_does_not_fetch_anything(view: SettingsView) -> None:
+    """The token is already gone by the time this runs."""
+    view.show_retired.setChecked(True)
+    api_of(view).calls.clear()
+
+    view.reset()
+
+    assert api_of(view).calls == []
+
+
+def test_resetting_still_unticks_show_retired(view: SettingsView) -> None:
+    """Silencing the signal must not cost the reset itself."""
+    view.show_retired.setChecked(True)
+
+    view.reset()
+
+    assert not view.show_retired.isChecked()
+
+
+def test_resetting_leaves_no_message_from_the_last_session(qtbot) -> None:
+    """`reset` cleared the banner but not the empty-list message underneath it."""
+    widget = SettingsView(StubApi(error=ApiError("Not authenticated.", status_code=401)))
+    qtbot.addWidget(widget)
+    widget.reload()
+    assert widget.empty_message.text()
+
+    widget.reset()
+
+    assert widget.empty_message.text() == ""
+    assert widget.banner.text() == ""
+
+
+def test_the_checkbox_still_reloads_when_a_user_clicks_it(view: SettingsView) -> None:
+    """Signals are blocked during reset only, not disconnected for good."""
+    api_of(view).calls.clear()
+
+    view.show_retired.setChecked(True)
+
+    assert api_of(view).calls == [{"include_inactive": True}]

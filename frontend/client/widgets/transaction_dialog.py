@@ -68,6 +68,12 @@ class TransactionDialog(QDialog):
         self._save = save
         self._existing = transaction
         self._currency = currency
+        #: The edited transaction's own category, when it has since been
+        #: retired and so is missing from `_all_categories`. Held here because
+        #: the list is rebuilt whenever the type changes, and rebuilding it
+        #: from `_all_categories` alone would drop this one. See
+        #: `_repopulate_categories`.
+        self._retained: Category | None = None
 
         editing = transaction is not None
         self.setWindowTitle("Edit transaction" if editing else "Add transaction")
@@ -176,10 +182,31 @@ class TransactionDialog(QDialog):
             if category.category_type == wanted:
                 self.category_box.addItem(category.name, category.id)
 
+        # A retired category is not in `_all_categories`, so rebuilding from
+        # that alone deletes the entry `_fill_from` added and leaves the box
+        # showing whichever category happens to be first. Opening an old
+        # transaction and merely *looking* at the Type dropdown was enough to
+        # refile it somewhere the user never chose, which is exactly what
+        # keeping the retired entry exists to prevent.
+        if self._retained is not None and self._retained.category_type == wanted:
+            self.category_box.addItem(f"{self._retained.name} (retired)", self._retained.id)
+
         if previous is not None:
             restored = self.category_box.findData(previous)
             if restored >= 0:
                 self.category_box.setCurrentIndex(restored)
+                return
+
+        # Nothing carried over, which happens whenever the type changed: the
+        # previous choice belongs to the other list. Falling through used to
+        # leave whichever category sorts first selected, so flipping the type
+        # to look at it and flipping back refiled the transaction under a
+        # category nobody picked. Going back to the transaction's own type
+        # reselects what it is actually filed under.
+        if self._existing is not None and self._existing.category.category_type == wanted:
+            original = self.category_box.findData(self._existing.category.id)
+            if original >= 0:
+                self.category_box.setCurrentIndex(original)
 
     def _fill_from(self, transaction: Transaction) -> None:
         """Populate the form from an existing transaction."""
@@ -192,6 +219,7 @@ class TransactionDialog(QDialog):
         # silently moving it to whichever category happens to be first.
         category_index = self.category_box.findData(transaction.category.id)
         if category_index < 0:
+            self._retained = transaction.category
             self.category_box.addItem(
                 f"{transaction.category.name} (retired)", transaction.category.id
             )

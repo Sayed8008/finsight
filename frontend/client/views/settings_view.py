@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -41,6 +40,7 @@ from PySide6.QtWidgets import (
 from client.api.client import ApiClient, ApiError
 from client.api.dto import EXPENSE, INCOME, Category, User
 from client.widgets.category_dialog import CategoryDialog
+from client.widgets.confirm import confirm
 from client.widgets.forms import MessageBanner
 
 logger = logging.getLogger(__name__)
@@ -230,9 +230,18 @@ class SettingsView(QWidget):
         self._loaded = False
         self._user = None
         self._categories = []
+        # Silently, because `stateChanged` is wired to `reload`. Sign-out
+        # discards the token before this runs, so unticking it here fetched
+        # categories with no credentials, got a 401, and left "Could not load
+        # categories. Not authenticated" on the screen the next user sees —
+        # `empty_message` is not cleared below. Same reasoning as
+        # `TransactionsView.clear_filters_quietly`.
+        self.show_retired.blockSignals(True)
         self.show_retired.setChecked(False)
+        self.show_retired.blockSignals(False)
         self._clear_list()
         self.banner.clear_message()
+        self.empty_message.setText("")
         self.account_name.setText("—")
         self.account_email.setText("—")
         self.account_currency.setText("—")
@@ -391,17 +400,14 @@ class SettingsView(QWidget):
         delete here (ADR-020), and somebody expecting one needs to know that the
         history stays exactly where it is.
         """
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "Retire category",
             f"Stop offering {category.name} for new transactions, budgets and "
             "subscriptions?\n\n"
             "Nothing already filed under it changes — this is not a delete, and it "
             "can be undone from this screen.",
-            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer is not QMessageBox.StandardButton.Yes:
+        ):
             return
 
         if self._set_active(category, active=False):

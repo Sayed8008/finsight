@@ -591,3 +591,101 @@ def test_a_redrawn_chart_shows_only_the_current_categories(qtbot) -> None:
     chart.set_shares((share("Shopping", "80.00", "100.00"),))
 
     assert chart.axis_labels == ["Shopping  100%"]
+
+
+# ─── The percentages beside the bars ──────────────────────────────────────
+#
+# Reported from manual testing as percentages that "look visually and
+# mathematically suspicious". The bars were right — they are drawn from the
+# amounts — and the labels beside them were not, which is what made it look
+# wrong rather than merely be wrong.
+#
+# Every fixture above this line uses a percentage that survives `:.0f`
+# untouched (50, 75, 100, 60, 40, 33.33). Not one ends in .5, which is why the
+# suite never noticed.
+
+
+def test_a_half_share_is_not_rounded_away(qtbot) -> None:
+    """The reported case: Food 500 and Transport 300 out of 800.
+
+    The server sends 62.50 and 37.50. The chart printed "62%" and "38%" — the
+    same half rounded down for one category and up for the other, because
+    formatting a Decimal with `:.0f` rounds half to *even*.
+    """
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+
+    chart.set_shares(
+        (
+            share("Food", "500.00", "62.50"),
+            share("Transport", "300.00", "37.50"),
+        )
+    )
+
+    assert chart.axis_labels == ["Food  62.5%", "Transport  37.5%"]
+
+
+def test_the_labels_agree_with_the_amounts_they_sit_beside(qtbot) -> None:
+    """A label must report the share the bar's own length represents."""
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+
+    chart.set_shares(
+        (
+            share("Food", "500.00", "62.50"),
+            share("Transport", "300.00", "37.50"),
+        )
+    )
+
+    total = sum(chart.bar_values)
+    for label, value in zip(chart.axis_labels, chart.bar_values, strict=True):
+        shown = Decimal(label.rsplit("  ", 1)[1].rstrip("%"))
+        actual = Decimal(value) / Decimal(total) * 100
+
+        assert abs(shown - actual) <= Decimal("0.05"), label
+
+
+def test_a_tooltip_reports_the_same_share_as_the_label(qtbot) -> None:
+    """The two are formatted separately, so they can disagree."""
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+    chart.set_currency("BDT")
+
+    chart.set_shares(
+        (
+            share("Food", "500.00", "62.50"),
+            share("Transport", "300.00", "37.50"),
+        )
+    )
+
+    assert chart.tooltip_for(0) == "Transport · 300.00 BDT · 37.5% of spending"
+    assert chart.tooltip_for(1) == "Food · 500.00 BDT · 62.5% of spending"
+
+
+def test_a_whole_share_keeps_its_clean_label(qtbot) -> None:
+    """Showing "50.0%" everywhere to fix the halves would be its own problem."""
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+
+    chart.set_shares((share("Rent", "500.00", "50.00"), share("Food", "500.00", "50.00")))
+
+    assert chart.axis_labels == ["Rent  50%", "Food  50%"]
+
+
+def test_an_emptied_chart_keeps_none_of_the_last_breakdown(qtbot) -> None:
+    """Signing out empties the chart, and the next person must not inherit it.
+
+    `set_shares(())` switched to the empty page and returned, leaving the bars,
+    the axis labels and the tooltips naming the previous user's categories
+    loaded underneath it.
+    """
+    chart = SpendingChart()
+    qtbot.addWidget(chart)
+    chart.set_currency("BDT")
+    chart.set_shares((share("Rent", "900.00", "60.00"), share("Food", "600.00", "40.00")))
+
+    chart.set_shares(())
+
+    assert chart.axis_labels == []
+    assert chart.bar_values == []
+    assert chart.tooltip_for(0) == ""

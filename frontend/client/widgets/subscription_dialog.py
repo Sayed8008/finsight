@@ -248,6 +248,19 @@ class SubscriptionDialog(QDialog):
 
         `next_billing_date` is absent: the server derives it from the start
         date and the cycle.
+
+        On an edit, the start date and the cycle are sent *only if they
+        changed*. The server recomputes the next billing date whenever either
+        is present — deliberately, because a subscription may not claim a
+        schedule its own anchor contradicts — and it decides "present" with
+        `exclude_unset`. So a body that repeats the unchanged anchor reads as
+        "the anchor was set", and the recomputed date is the first occurrence
+        on or after today.
+
+        That is what made editing a price undo every renewal: a monthly
+        subscription anchored 10 Jan and marked renewed twice sat at 10 Nov,
+        and saving a new amount moved it back to 10 Sep. The recorded charges
+        were gone, and the card then read as overdue.
         """
         notes = self.notes_edit.toPlainText().strip()
         method = self.method_box.currentText().strip()
@@ -255,13 +268,19 @@ class SubscriptionDialog(QDialog):
         body: dict[str, Any] = {
             "name": self.name_field.text().strip(),
             "amount": f"{amount:.2f}",
-            "billing_cycle": self.cycle_box.currentData(),
-            "start_date": self.start_edit.date().toString(Qt.DateFormat.ISODate),
             "status": self.status_box.currentData(),
             "category_id": self.category_box.currentData(),
             "payment_method": method or None,
             "notes": notes or None,
         }
+
+        cycle = self.cycle_box.currentData()
+        start = self.start_edit.date().toString(Qt.DateFormat.ISODate)
+        if self._existing is None or cycle != self._existing.billing_cycle:
+            body["billing_cycle"] = cycle
+        if self._existing is None or start != self._existing.start_date.isoformat():
+            body["start_date"] = start
+
         if self.has_end_date.isChecked():
             body["end_date"] = self.end_edit.date().toString(Qt.DateFormat.ISODate)
         else:

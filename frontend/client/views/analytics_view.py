@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiClient, ApiError
 from client.api.dto import CategoryChange, Change, Comparison, Trend
+from client.core.formatting import percentage_text
 from client.widgets.forms import LabelledWidget, MessageBanner
 from client.widgets.stat_tile import NEGATIVE, NEUTRAL, POSITIVE, StatTile
 from client.widgets.trend_chart import TrendChart
@@ -300,7 +301,7 @@ class AnalyticsView(QWidget):
         size = self._money(abs(change.difference))
         if change.percentage is None:
             return f"{direction} {size}"
-        return f"{direction} {size} ({abs(change.percentage):.0f}%)"
+        return f"{direction} {size} ({percentage_text(abs(change.percentage))}%)"
 
     def _render_rows(self, categories: tuple[CategoryChange, ...]) -> None:
         for index in reversed(range(self._rows_layout.count())):
@@ -363,7 +364,7 @@ class AnalyticsView(QWidget):
         arrow = "▲" if change.rose else "▼"
         if change.percentage is None:
             return f"{arrow} {self._money(abs(change.difference))}"
-        return f"{arrow} {abs(change.percentage):.0f}%"
+        return f"{arrow} {percentage_text(abs(change.percentage))}%"
 
     def _money(self, value: Decimal) -> str:
         return f"{value:,.2f} {self._currency}".strip()

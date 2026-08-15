@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QStackedWidget, QWidget
+from PySide6.QtWidgets import QMainWindow, QStackedWidget, QWidget
 
 from client.api.client import ApiClient, ApiError
 from client.core.session import Session
 from client.views.auth_view import AuthView
 from client.views.main_view import MainView
+from client.widgets.confirm import confirm
 
 logger = logging.getLogger(__name__)
 
@@ -78,14 +79,7 @@ class MainWindow(QMainWindow):
         by accident, so it gets a confirmation like any other action the user
         cannot undo with one click.
         """
-        answer = QMessageBox.question(
-            self,
-            "Sign out",
-            "Sign out of FinSight?",
-            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer is QMessageBox.StandardButton.Yes:
+        if confirm(self, "Sign out", "Sign out of FinSight?"):
             self.session.log_out()
 
     # ─── Backend status ───────────────────────────────────────────────────

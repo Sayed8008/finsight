@@ -83,6 +83,9 @@ class StubApi:
         self.exports: list[dict[str, Any]] = []
         self.previews: list[dict[str, Any]] = []
         self.imports: list[dict[str, Any]] = []
+        #: What an import reports having created. Settable, because whether
+        #: anything was created decides whether the other screens are told.
+        self.created_categories: tuple[str, ...] = ("Skydiving",)
 
     # The two calls made when the view first opens.
     def categories(self, **_: Any) -> list[Category]:
@@ -144,7 +147,7 @@ class StubApi:
             imported=3,
             skipped_duplicates=1,
             skipped_invalid=0,
-            created_categories=("Skydiving",),
+            created_categories=self.created_categories,
             first_date=date(2026, 3, 1),
             last_date=date(2026, 3, 31),
         )
@@ -632,31 +635,33 @@ def test_deleting_without_a_selection_is_reported(view: TransactionsView) -> Non
 
 
 def test_deleting_asks_first_and_does_nothing_if_declined(
-    view: TransactionsView, monkeypatch
+    view: TransactionsView, answer_confirmation
 ) -> None:
     """Deleting cannot be undone, so a mis-click must not be enough to do it."""
-    from PySide6.QtWidgets import QMessageBox
-
-    monkeypatch.setattr(
-        QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Cancel
-    )
     view.table.selectRow(0)
 
-    view.delete_selected()
+    answer_confirmation(view.delete_selected, "Cancel")
 
     assert api_of(view).deleted == []
 
 
-def test_confirming_deletes_the_selected_transaction(view: TransactionsView, monkeypatch) -> None:
-    from PySide6.QtWidgets import QMessageBox
+def test_confirming_deletes_the_selected_transaction(
+    view: TransactionsView, answer_confirmation
+) -> None:
+    """Reported from manual testing: the dialog appeared, Yes was pressed, and
+    the transaction stayed exactly where it was.
 
-    monkeypatch.setattr(
-        QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes
-    )
+    The test that was here stubbed `QMessageBox.question` to return
+    `StandardButton.Yes` — a value real Qt never returns, since it hands back a
+    plain int. The stub made the view's `answer is not ...Yes` check pass while
+    it always failed in the running application, so this asserted a delete that
+    never happened. It now presses the real button.
+    """
     view.table.selectRow(0)
 
-    view.delete_selected()
+    asked = answer_confirmation(view.delete_selected, "Yes")
 
+    assert "This cannot be undone" in asked
     assert api_of(view).deleted == [1]
 
 
@@ -768,6 +773,61 @@ def test_editing_keeps_a_retired_category_available(qtbot) -> None:
 
     assert dialog.category_box.currentData() == retired.id
     assert "retired" in dialog.category_box.currentText()
+
+
+def test_a_retired_category_survives_touching_the_type_dropdown(qtbot) -> None:
+    """The category list is rebuilt whenever the type changes, from a list the
+    retired category is not in — so opening an old transaction and merely
+    looking at the Type dropdown silently refiled it under whichever category
+    came first, and saving made that permanent."""
+    retired = Category(id=9, name="Old Category", category_type="expense", is_active=False)
+    existing = transaction(category=retired)
+    dialog, _ = make_dialog(qtbot, transaction=existing)
+
+    # The user opens the Type dropdown, flips to Income and back to Expense.
+    dialog.type_box.setCurrentIndex(dialog.type_box.findData("income"))
+    dialog.type_box.setCurrentIndex(dialog.type_box.findData("expense"))
+
+    assert dialog.category_box.currentData() == retired.id
+    assert "retired" in dialog.category_box.currentText()
+
+
+def test_a_retired_category_is_not_offered_under_the_wrong_type(qtbot) -> None:
+    """Held for the transaction's own type only — an expense category must not
+    appear in the income list."""
+    retired = Category(id=9, name="Old Category", category_type="expense", is_active=False)
+    dialog, _ = make_dialog(qtbot, transaction=transaction(category=retired))
+
+    dialog.type_box.setCurrentIndex(dialog.type_box.findData("income"))
+    names = [dialog.category_box.itemText(i) for i in range(dialog.category_box.count())]
+
+    assert names == ["Salary"]
+
+
+def test_an_ordinary_category_also_survives_the_round_trip(qtbot) -> None:
+    """Not only retired ones. Any transaction not filed under whichever
+    category sorts first was refiled by a look at the Type dropdown."""
+    existing = transaction(category=CATEGORIES[2])  # Transport, second in the list
+    dialog, _ = make_dialog(qtbot, transaction=existing)
+
+    dialog.type_box.setCurrentIndex(dialog.type_box.findData("income"))
+    dialog.type_box.setCurrentIndex(dialog.type_box.findData("expense"))
+
+    assert dialog.category_box.currentData() == CATEGORIES[2].id
+
+
+def test_saving_an_edited_transaction_keeps_its_retired_category(qtbot) -> None:
+    """The whole point: what is sent must be the category it was already filed
+    under, not the one the rebuilt list happened to select."""
+    retired = Category(id=9, name="Old Category", category_type="expense", is_active=False)
+    dialog, saved = make_dialog(qtbot, transaction=transaction(category=retired))
+
+    dialog.type_box.setCurrentIndex(dialog.type_box.findData("income"))
+    dialog.type_box.setCurrentIndex(dialog.type_box.findData("expense"))
+    dialog.amount_field.input.setText("300.00")
+    dialog.submit()
+
+    assert saved[0]["category_id"] == retired.id
 
 
 def test_adding_a_transaction_reloads_the_list(view: TransactionsView, monkeypatch) -> None:
@@ -929,6 +989,49 @@ def test_a_cancelled_import_leaves_the_screen_alone(
     view.open_import(str(path))
 
     assert api_of(view).calls == []
+
+
+def test_an_import_that_creates_a_category_tells_the_other_screens(
+    view: TransactionsView, tmp_path, monkeypatch, qtbot
+) -> None:
+    """Settings is not the only way to make a category — an import with
+    `unknown_categories=CREATE` makes them too, and the budget and
+    subscription pickers hold their own lists, fetched once. Without this the
+    imported category was missing from them until the app was restarted."""
+    path = tmp_path / "statement.csv"
+    path.write_bytes(b"Date,Amount,Type,Category\n2026-03-04,10.00,expense,Skydiving\n")
+
+    def check_and_import(dialog: ImportDialog) -> int:
+        dialog.check_file()
+        dialog.run_import()
+        return 1
+
+    monkeypatch.setattr(ImportDialog, "exec", check_and_import)
+
+    with qtbot.waitSignal(view.categories_changed, timeout=1000):
+        view.open_import(str(path))
+
+
+def test_an_import_that_creates_nothing_stays_quiet(
+    view: TransactionsView, tmp_path, monkeypatch
+) -> None:
+    """Otherwise every ordinary import costs three extra requests."""
+    path = tmp_path / "statement.csv"
+    path.write_bytes(b"Date,Amount,Type,Category\n2026-03-04,10.00,expense,Food\n")
+    api_of(view).created_categories = ()
+
+    def check_and_import(dialog: ImportDialog) -> int:
+        dialog.check_file()
+        dialog.run_import()
+        return 1
+
+    monkeypatch.setattr(ImportDialog, "exec", check_and_import)
+    announced: list[int] = []
+    view.categories_changed.connect(lambda: announced.append(1))
+
+    view.open_import(str(path))
+
+    assert announced == []
 
 
 # ─── The payment method picker must be usable on a new account ────────────

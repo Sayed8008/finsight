@@ -484,3 +484,74 @@ def test_every_severity_is_orderable(severity: Severity) -> None:
     from app.services.insight_rules import SEVERITY_ORDER
 
     assert severity in SEVERITY_ORDER
+
+
+# ─── Percentages in the sentences ─────────────────────────────────────────
+#
+# Every percentage here was written as `f"{value:.0f}"`, which formats a
+# Decimal through the decimal context — whose default is banker's rounding. So
+# halves went whichever way the neighbouring digit fell: 62.50 printed "62"
+# and 37.50 printed "38", in the same sentence.
+#
+# The second half of this is that a *share* was not bounded. The subscription
+# rule weighs a monthly subscription total against the expense of a period
+# that may be half over, so it could say "166% of the 3,000.00 you spent".
+
+
+def test_a_budget_share_rounds_halves_up() -> None:
+    """8,750 of 10,000 is exactly 87.5%, which must read as 88."""
+    found = list(budget_nearly_spent(snapshot(budgets=(budget("8750.00"),))))
+
+    assert found[0].detail.startswith("88% used")
+
+
+def test_the_pace_rule_rounds_both_of_its_halves_the_same_way() -> None:
+    """The clearest form of the bug: two halves in one sentence, and `:.0f`
+    sent 62.50 down and 37.50 up."""
+    fact = budget("5000.00", amount="8000.00", days_remaining=20, days_total=32)
+    found = list(budget_ahead_of_pace(snapshot(budgets=(fact,))))
+
+    assert "63% of the budget is gone" in found[0].detail
+    assert "only 38% of the period has passed" in found[0].detail
+
+
+def test_a_share_of_spending_is_never_reported_above_one_hundred() -> None:
+    """5,000 a month of subscriptions against 3,000 spent so far is a real
+    state — early in a light month — and "166% of the 3,000.00 you spent this
+    period" is a contradiction rather than a large number."""
+    found = list(
+        subscriptions_are_heavy(
+            snapshot(expense=Decimal("3000.00"), subscription_monthly_total=Decimal("5000.00"))
+        )
+    )
+
+    assert "100% of the 3,000.00" in found[0].detail
+    assert "166%" not in found[0].detail
+
+
+def test_capping_the_sentence_does_not_flatten_the_ranking() -> None:
+    """Only the text is bounded. The magnitude still orders one insight
+    against another, so two heavy months are not made equal by how they read."""
+    heavier = list(
+        subscriptions_are_heavy(
+            snapshot(expense=Decimal("3000.00"), subscription_monthly_total=Decimal("5000.00"))
+        )
+    )[0]
+    heavy = list(
+        subscriptions_are_heavy(
+            snapshot(expense=Decimal("3000.00"), subscription_monthly_total=Decimal("3600.00"))
+        )
+    )[0]
+
+    assert heavier.magnitude > heavy.magnitude > Decimal("100")
+
+
+def test_a_rise_is_not_a_share_and_is_never_capped() -> None:
+    """Rent going from 28,000 to 214,000 is up 664%. Capping that at 100 would
+    report it as the same as a doubling."""
+    fact = CategoryFact(
+        category_id=1, name="Rent", current=Decimal("214000.00"), previous=Decimal("28000.00")
+    )
+    found = list(category_rose(snapshot(categories=(fact,))))
+
+    assert "up 664%" in found[0].detail

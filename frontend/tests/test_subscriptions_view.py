@@ -162,18 +162,6 @@ def cards(view: SubscriptionsView) -> list[SubscriptionCard]:
     return view.findChildren(SubscriptionCard)
 
 
-def yes(monkeypatch) -> None:
-    from PySide6.QtWidgets import QMessageBox
-
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
-
-
-def no(monkeypatch) -> None:
-    from PySide6.QtWidgets import QMessageBox
-
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Cancel)
-
-
 # ─── Renewal wording ──────────────────────────────────────────────────────
 
 
@@ -421,46 +409,46 @@ def test_an_unreachable_backend_is_reported(qtbot) -> None:
 # ─── Actions ──────────────────────────────────────────────────────────────
 
 
-def test_renewing_asks_first(view: SubscriptionsView, monkeypatch) -> None:
+def test_renewing_asks_first(view: SubscriptionsView, answer_confirmation) -> None:
     """It moves the billing date, and a double-click would skip a month silently."""
-    no(monkeypatch)
-
-    view.renew_subscription(1)
+    answer_confirmation(lambda: view.renew_subscription(1), "Cancel")
 
     assert api_of(view).renewed == []
 
 
 def test_confirming_a_renewal_calls_the_api_and_reloads(
-    view: SubscriptionsView, monkeypatch
+    view: SubscriptionsView, answer_confirmation
 ) -> None:
-    yes(monkeypatch)
+    """Reported from manual testing as a dialog that did nothing. The stub this
+    test used returned a `StandardButton` member, which real Qt never does — so
+    it passed against a view that always took the early return."""
     api_of(view).reset()
 
-    view.renew_subscription(1)
+    asked = answer_confirmation(lambda: view.renew_subscription(1), "Yes")
 
+    assert "was charged on" in asked
     assert api_of(view).renewed == [1]
     assert len(api_of(view).calls) == 1
 
 
-def test_deleting_asks_first(view: SubscriptionsView, monkeypatch) -> None:
-    no(monkeypatch)
-
-    view.delete_subscription(1)
+def test_deleting_asks_first(view: SubscriptionsView, answer_confirmation) -> None:
+    answer_confirmation(lambda: view.delete_subscription(1), "Cancel")
 
     assert api_of(view).deleted == []
 
 
-def test_confirming_deletes(view: SubscriptionsView, monkeypatch) -> None:
-    yes(monkeypatch)
-
-    view.delete_subscription(1)
+def test_confirming_deletes(view: SubscriptionsView, answer_confirmation) -> None:
+    answer_confirmation(lambda: view.delete_subscription(1), "Yes")
 
     assert api_of(view).deleted == [1]
 
 
-def test_acting_on_an_unknown_id_does_nothing(view: SubscriptionsView, monkeypatch) -> None:
-    yes(monkeypatch)
+def test_acting_on_an_unknown_id_does_nothing(view: SubscriptionsView) -> None:
+    """No dialog should even open: these ids are not in the list.
 
+    `answer_confirmation` is deliberately not used — it asserts a dialog
+    appeared, and the point here is that none does.
+    """
     view.renew_subscription(999)
     view.delete_subscription(999)
     view.edit_subscription(999)
@@ -614,6 +602,64 @@ def test_editing_keeps_a_retired_category(qtbot) -> None:
 
     assert dialog.category_box.currentData() == retired.id
     assert "retired" in dialog.category_box.currentText()
+
+
+# ─── An edit must not undo a recorded renewal ─────────────────────────────
+#
+# Reported from manual testing and reproduced against a live backend: a monthly
+# subscription anchored 10 Jan, marked renewed twice, sat at 10 Nov. Editing
+# only its price moved it back to 10 Sep — both charges gone, and the card then
+# read "overdue".
+#
+# The server recomputes `next_billing_date` whenever `start_date` or
+# `billing_cycle` is present, and decides "present" with `exclude_unset`. The
+# dialog sent one flat body for create and update, so an edit always repeated
+# the unchanged anchor and so always read as a change to it.
+
+
+def test_editing_does_not_resend_an_unchanged_anchor(qtbot) -> None:
+    """The fix, at the level the bug happened."""
+    existing = subscription(cycle="monthly")
+    dialog, saved = make_dialog(qtbot, subscription=existing)
+
+    dialog.amount_field.input.setText("550.00")
+    dialog.submit()
+
+    assert "start_date" not in saved[0]
+    assert "billing_cycle" not in saved[0]
+    assert saved[0]["amount"] == "550.00"
+
+
+def test_editing_sends_the_start_date_when_it_really_changed(qtbot) -> None:
+    """Omitting it unconditionally would be the opposite bug: the schedule
+    would stop following its own anchor."""
+    dialog, saved = make_dialog(qtbot, subscription=subscription())
+
+    dialog.start_edit.setDate(QDate(2026, 2, 1))
+    dialog.submit()
+
+    assert saved[0]["start_date"] == "2026-02-01"
+
+
+def test_editing_sends_the_cycle_when_it_really_changed(qtbot) -> None:
+    dialog, saved = make_dialog(qtbot, subscription=subscription(cycle="monthly"))
+
+    dialog.cycle_box.setCurrentIndex(dialog.cycle_box.findData("yearly"))
+    dialog.submit()
+
+    assert saved[0]["billing_cycle"] == "yearly"
+
+
+def test_creating_still_sends_both(qtbot) -> None:
+    """A new subscription has no anchor on the server to leave alone."""
+    dialog, saved = make_dialog(qtbot)
+    dialog.name_field.input.setText("Netflix")
+    dialog.amount_field.input.setText("499.00")
+
+    dialog.submit()
+
+    assert saved[0]["start_date"]
+    assert saved[0]["billing_cycle"]
 
 
 def test_adding_reloads_the_list(view: SubscriptionsView, monkeypatch) -> None:

@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -30,6 +29,7 @@ from PySide6.QtWidgets import (
 from client.api.client import ApiClient, ApiError
 from client.api.dto import ACTIVE, CANCELLED, PAUSED, Category, Subscription, SubscriptionSummary
 from client.widgets.busy import working
+from client.widgets.confirm import confirm
 from client.widgets.detection_dialog import DetectionDialog
 from client.widgets.forms import LabelledWidget, MessageBanner
 from client.widgets.subscription_card import SubscriptionCard
@@ -426,16 +426,13 @@ class SubscriptionsView(QWidget):
         if subscription is None:
             return
 
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "Mark as renewed",
             f"Record that {subscription.name} was charged on "
             f"{subscription.next_billing_date:%d %b %Y}?\n\n"
             "The next billing date moves forward one cycle.",
-            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer is not QMessageBox.StandardButton.Yes:
+        ):
             return
 
         try:
@@ -451,16 +448,13 @@ class SubscriptionsView(QWidget):
         if subscription is None:
             return
 
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "Delete subscription",
             f"Delete {subscription.name}?\n\n"
             "This removes the record entirely. To keep the history, set its "
             "status to Cancelled instead.",
-            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer is not QMessageBox.StandardButton.Yes:
+        ):
             return
 
         try:

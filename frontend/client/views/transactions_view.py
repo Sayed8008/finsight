@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QDate, Qt, QTimer
+from PySide6.QtCore import QDate, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -43,6 +42,7 @@ from client.api.client import ApiClient, ApiError
 from client.api.dto import EXPENSE, INCOME, Category, Transaction, TransactionPage
 from client.models.transaction_table import COLUMNS, DESCRIPTION, TransactionTableModel
 from client.widgets.busy import working
+from client.widgets.confirm import confirm
 from client.widgets.forms import LabelledWidget, MessageBanner
 from client.widgets.import_dialog import ImportDialog
 from client.widgets.transaction_dialog import TransactionDialog
@@ -65,6 +65,14 @@ EMPTY_PAGE = 1
 
 class TransactionsView(QWidget):
     """The Transactions section of the application."""
+
+    #: Emitted when an import creates categories, so the shell can refresh the
+    #: pickers on the other screens. Settings has the same signal and for the
+    #: same reason: every screen offering a category holds its own list,
+    #: fetched once. Importing a CSV with `unknown_categories=CREATE` is the
+    #: only other way to make one, and without this the new category was
+    #: missing from the budget and subscription dialogs until a restart.
+    categories_changed = Signal()
 
     def __init__(self, api_client: ApiClient, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -622,15 +630,12 @@ class TransactionsView(QWidget):
             self.banner.show_error("Select a transaction to delete.")
             return
 
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "Delete transaction",
             f"Delete {transaction.amount:,.2f} {self._currency} "
             f"on {transaction.date:%d %b %Y}?\n\nThis cannot be undone.",
-            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer is not QMessageBox.StandardButton.Yes:
+        ):
             return
 
         try:
@@ -742,6 +747,11 @@ class TransactionsView(QWidget):
         self._current_page = 1
         self.refresh_categories()
         self.reload()
+        if dialog.result.created_categories:
+            # And the other screens' pickers hold their own lists, which this
+            # screen cannot reach. Announced only when something was actually
+            # created, so an ordinary import costs no extra requests.
+            self.categories_changed.emit()
         # After the reload, not before: `reload` clears the banner on success,
         # which would wipe the one message the user actually wants to read.
         self.banner.show_info(dialog.result.summary)

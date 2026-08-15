@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -31,6 +30,7 @@ from client.api.client import ApiClient, ApiError
 from client.api.dto import EXPENSE, Budget, Category
 from client.widgets.budget_card import BudgetCard
 from client.widgets.budget_dialog import BudgetDialog
+from client.widgets.confirm import confirm
 from client.widgets.forms import LabelledWidget, MessageBanner
 
 logger = logging.getLogger(__name__)
@@ -379,16 +379,13 @@ class BudgetsView(QWidget):
         if budget is None:
             return
 
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "Delete budget",
             f"Delete the {budget.category.name} budget for "
             f"{budget.period_start:%d %b} – {budget.period_end:%d %b %Y}?\n\n"
             "Your transactions are not affected.",
-            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer is not QMessageBox.StandardButton.Yes:
+        ):
             return
 
         try:

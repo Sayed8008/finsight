@@ -74,6 +74,39 @@ def percentage_of(part: Decimal, whole: Decimal) -> Decimal:
     return quantise(part / whole * HUNDRED)
 
 
+def percent_text(value: Decimal) -> str:
+    """A percentage as whole-number text, for a sentence. No `%` sign.
+
+    `f"{value:.0f}"` is what this replaces, and it is wrong for a `Decimal`:
+    formatting one uses the decimal context, whose default is
+    `ROUND_HALF_EVEN`. So 12.50 printed as "12" and 37.50 as "38" — halves
+    rounded in whichever direction the neighbouring digit happened to be. This
+    rounds half *up*, the same as `quantise`, so a figure rounded for a
+    sentence agrees with the same figure rounded anywhere else.
+    """
+    return f"{value.quantize(Decimal('1'), rounding=ROUND_HALF_UP)}"
+
+
+def share_text(percentage: Decimal) -> str:
+    """A share as whole-number text, never above 100.
+
+    A share is a part of a whole, so a sentence claiming more than all of it
+    is not a large number — it is a contradiction the reader has to stop and
+    unpick. It happens honestly: the subscription rule weighs a *monthly*
+    subscription total against the expense of a period that may be half over,
+    and "166% of the 3,000.00 you spent this period" is the result.
+
+    Bounding the *text* rather than the value is deliberate. The underlying
+    percentage still ranks one insight against another; only the sentence is
+    capped, so nothing is reordered by how it happens to read.
+
+    A percentage *change* is not a share and must not come through here: a
+    category that tripled is up 200%, and capping that would report a
+    tripling and a twentyfold rise as the same thing. Use `percent_text`.
+    """
+    return percent_text(min(percentage, HUNDRED))
+
+
 #: An amount in a response body. Serialised as a JSON string (ADR-003).
 #: `when_used="json"` keeps `model_dump()` returning a `Decimal`, so Python
 #: callers and tests still work with the real numeric type.

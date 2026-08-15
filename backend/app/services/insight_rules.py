@@ -28,7 +28,7 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from app.core.money import ZERO, percentage_of
+from app.core.money import ZERO, percent_text, percentage_of, share_text
 
 # ─── Thresholds ───────────────────────────────────────────────────────────
 # Named, gathered, and stated once. A rule with a bare `0.8` in it is a rule
@@ -212,6 +212,16 @@ def _days(count: int) -> str:
     return f"{count} day{'s' if count != 1 else ''}"
 
 
+#: A share of a whole — bounded at 100%, because a part cannot exceed the
+#: whole it is a part of.
+_share = share_text
+
+#: A percentage that is *not* a share, and so is not bounded. A category that
+#: went from 28,000 to 214,000 is up 664%, and rounding that down to 100 would
+#: report it as the same as a doubling.
+_percent = percent_text
+
+
 # ─── Rules ────────────────────────────────────────────────────────────────
 # Each takes the snapshot and yields zero or more insights.
 
@@ -251,8 +261,9 @@ def budget_nearly_spent(snapshot: InsightSnapshot) -> Iterable[Insight]:
             severity=Severity.WARNING,
             title=f"{budget.category_name} budget almost gone",
             detail=(
-                f"{budget.percentage_used:.0f}% used — {_money(budget.remaining)} "
-                f"left with {_days(budget.days_remaining or 0)} to go."
+                f"{_share(budget.percentage_used)}% used — "
+                f"{_money(budget.remaining)} left with "
+                f"{_days(budget.days_remaining or 0)} to go."
             ),
             magnitude=budget.percentage_used,
             category_id=budget.category_id,
@@ -285,9 +296,9 @@ def budget_ahead_of_pace(snapshot: InsightSnapshot) -> Iterable[Insight]:
             severity=Severity.WARNING,
             title=f"{budget.category_name} spending is ahead of pace",
             detail=(
-                f"{budget.percentage_used:.0f}% of the budget is gone but only "
-                f"{elapsed:.0f}% of the period has passed. At this rate it runs "
-                f"out before {budget.days_remaining} more days are up."
+                f"{_share(budget.percentage_used)}% of the budget is gone but "
+                f"only {_share(elapsed)}% of the period has passed. At this "
+                f"rate it runs out before {budget.days_remaining} more days are up."
             ),
             magnitude=budget.percentage_used - elapsed,
             category_id=budget.category_id,
@@ -380,8 +391,8 @@ def subscriptions_are_heavy(snapshot: InsightSnapshot) -> Iterable[Insight]:
         title="Subscriptions are a large share of your spending",
         detail=(
             f"{_money(snapshot.subscription_monthly_total)} a month in "
-            f"subscriptions — {share:.0f}% of the {_money(snapshot.expense)} you "
-            f"spent this period."
+            f"subscriptions — {_share(share)}% of the {_money(snapshot.expense)} "
+            f"you spent this period."
         ),
         magnitude=share,
     )
@@ -402,7 +413,7 @@ def category_rose(snapshot: InsightSnapshot) -> Iterable[Insight]:
             title=f"{category.name} spending is up",
             detail=(
                 f"{_money(category.current)} this period against "
-                f"{_money(category.previous)} last — up {change:.0f}%, "
+                f"{_money(category.previous)} last — up {_percent(change)}%, "
                 f"{_money(category.difference)} more."
             ),
             magnitude=category.difference,
