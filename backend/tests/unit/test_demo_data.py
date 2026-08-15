@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.models.enums import TransactionType
-from app.services.recurrence import Charge, detect
+from app.services.recurrence import MAX_OFF_CYCLE, Charge, detect
 from tools.demo_data import (
     DEFAULT_DAYS,
     GYM,
@@ -62,6 +62,28 @@ def test_detection_does_not_propose_the_gym() -> None:
     found = {candidate.name for candidate in detect(charges(history()))}
 
     assert "Fitness First Gulshan" not in found
+
+
+def test_ordinary_habits_are_not_proposed_as_subscriptions() -> None:
+    """A year of groceries, taxis and cinema tickets contains runs that are
+    superficially regular. Every one of these was proposed at some point —
+    "82±70 days apart", "112±77", "98±69" — carrying evidence that refuted
+    itself. This is the test that keeps them out."""
+    found = {candidate.name for candidate in detect(charges(history()))}
+
+    assert found.isdisjoint(
+        {"Cng Fare", "Pharmacy", "Star Cineplex", "Shwapno Supershop", "Uber", "Campus Canteen"}
+    ), found
+
+
+def test_nothing_proposed_carries_evidence_that_refutes_itself() -> None:
+    """The property the spread ceiling exists to guarantee, checked against a
+    year of realistic history rather than against contrived dates: a candidate
+    whose spread approaches its own interval is not describing a rhythm."""
+    for candidate in detect(charges(history())):
+        assert candidate.interval_spread_days <= (
+            candidate.median_interval_days * MAX_OFF_CYCLE
+        ), candidate.evidence
 
 
 def test_the_price_rise_is_still_one_subscription() -> None:

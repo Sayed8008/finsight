@@ -114,10 +114,13 @@ Be ready for this question — *"Rent and internet are in the list, is that
 wrong?"*:
 
 > No. Both genuinely recur, and somebody reviewing their commitments should see
-> them. The interesting judgement is at the bottom of the list: some candidates
-> come back marked *Possible* with evidence like "82±70 days apart", which is
-> self-refuting — the spread tells you immediately it is not regular. That is a
-> known weakness of the regularity threshold, and it is in the limitations list.
+> them. What is *not* in the list is the more interesting part: a year of
+> groceries, taxis and cinema tickets contains runs that look regular from a
+> distance, and earlier versions proposed several of them with evidence like
+> "98±69 days apart". A spread of sixty-nine days on a ninety-eight day
+> interval is not a rhythm, and the sentence gives itself away — so the rule is
+> now that the spread shown must be within forty per cent of the interval
+> shown. The check is on the numbers the user actually reads.
 
 ---
 
@@ -188,7 +191,7 @@ Click through from an insight to the screen it concerns.
 > the interface cannot reach the database even if somebody wanted it to. The
 > arithmetic is in pure functions with no database and no clock, which is why
 > there are eleven hundred tests and they run in under two minutes. And the
-> decision log has thirty-eight entries, each with what I rejected, because most
+> decision log has forty entries, each with what I rejected, because most
 > of the interesting work was in the choices that do not show up as features.
 
 ---
@@ -212,8 +215,16 @@ it and asserts it finds the three subscriptions and not the gym.
 limiter so it survives more than one worker, and moving requests off the event
 loop. All three are in the limitations list with the reasoning.
 
-**"What went wrong?"** Rendering the interface caught a defect in every single
-interface phase — a primary button painted in nothing, a checkbox with no box,
+**"What went wrong?"** The one I would lead with is not an interface defect.
+Running detection over a year of realistic history — rather than over the tidy
+dates the unit tests used — showed it proposing candidates whose own evidence
+refuted them: "98±69 days apart" is not a rhythm, and the sentence says so. The
+tests all passed, because every one of them used intervals chosen to be either
+regular or obviously irregular, and nothing in between. The fix was a ceiling on
+the worst gap rather than a higher average, and it is checked against the exact
+figures the sentence prints.
+
+Rendering the interface caught a defect in every single interface phase — a primary button painted in nothing, a checkbox with no box,
 combo boxes that had no dropdown arrow for seven phases, and an import report
 that went on claiming "412 of 418 rows would be imported" after the options had
 changed. None of them were visible in the source, and none would have been

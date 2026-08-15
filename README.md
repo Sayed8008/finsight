@@ -98,7 +98,7 @@ Runs on Linux and Windows.
 
 ## Decisions worth knowing
 
-Thirty-eight decisions are recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md),
+Forty decisions are recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md),
 each with what was rejected and why. The ones that shaped the most code:
 
 - **Money is `DECIMAL` everywhere, and a JSON *string* on the wire.** A JSON
@@ -121,6 +121,10 @@ each with what was rejected and why. The ones that shaped the most code:
 - **Detection matches merchants conservatively.** A missed subscription costs
   the user nothing. A merged pair produces a confident, wrong claim about their
   money (ADR-031).
+- **A candidate whose evidence refutes itself is never offered.** "98±69 days
+  apart" is not a rhythm, whatever confidence is attached to it, so the spread
+  shown is bounded against the interval shown — the rule is checked on the exact
+  figures the reader sees (ADR-040).
 - **Sign-in is throttled per address, never per email.** Throttling per email
   would let anyone lock the owner out of their own account — the protection
   becomes the attack (ADR-036).
@@ -219,7 +223,7 @@ screenshot cannot show a screen the application does not produce.
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest              # everything — 1125 tests
+.venv/bin/python -m pytest              # everything — 1162 tests
 .venv/bin/python -m pytest backend      # backend only
 .venv/bin/python -m pytest -m gui       # desktop client only
 ```

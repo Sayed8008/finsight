@@ -713,6 +713,21 @@ figures they were built from. Both come from the same rule — a finance
 application that cannot say *why* it said something is worse than one that says
 nothing.
 
+**The rule bites back (Phase 12).** Running the detector over a year of
+realistic history produced candidates carrying evidence like *"4 charges of
+about 742.50, 98±69 days apart"*. That sentence refutes itself — a spread of 69
+days on a 98-day interval is not a rhythm — and by this ADR's own standard it
+should never have been offered, whatever level was attached to it. It scored
+0.68 regularity, comfortably above the floor, because an *average* deviation
+absorbs one wild gap among several tidy ones almost entirely.
+
+The fix is `MAX_OFF_CYCLE` in ADR-040: a ceiling on the worst gap, checked
+against the rounded figures the evidence actually prints, so the rule is
+exactly the claim the user reads. Worth recording that the defect was found by
+looking at real output rather than by a failing test — the unit tests all
+passed, because every one of them used dates chosen to be regular or obviously
+irregular, and nothing in between.
+
 ---
 
 ## ADR-033 — Import is preview then commit, and the commit is fingerprinted
@@ -1044,3 +1059,72 @@ show a screen the application does not produce. This is the practice from
 ADR-012 pointed at documentation — and it behaved exactly as it has all along:
 taking them revealed that at a 1280px window the dashboard's right-hand column
 was clipped and, with horizontal scrolling switched off, unreachable.
+
+---
+
+## ADR-040 — Gaps are measured against whole cycles, and the worst one is bounded
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Every gap between charges is measured as its distance from the *nearest whole
+number of cycles* rather than from the median gap. A run is proposed only when
+the worst such distance is within `MAX_OFF_CYCLE` (0.4) of the cycle, in
+addition to the existing `MIN_REGULARITY` floor on the average.
+
+**The defect.** Detection was proposing candidates whose own evidence refuted
+them — *"98±69 days apart"*, *"82±70"*, *"112±77"*. All scored above the
+regularity floor, because regularity is one minus the **average** deviation and
+an average absorbs a single wild gap among tidy ones almost completely. Charges
+29, 124 and 98 days apart scored 0.68. The level attached was *Possible*, which
+is honest, but ADR-032 says the evidence *is* the confidence, and evidence that
+contradicts itself fails that test at any level.
+
+**Why the worst gap and not a better average.** The two failures are different
+and neither catches the other: a run can be typically fine with one wild gap, or
+uniformly mediocre. A ceiling on the maximum is the direct expression of "the
+spread we are about to print must not contradict the interval we are about to
+print" — and it is checked against the rounded figures for exactly that reason,
+so the rule *is* the claim the reader sees.
+
+**Why "distance from a whole number of cycles" and not "distance from the
+median".** Because the module already promised the former and delivered the
+latter. `score_intervals` documented that deviation from the median was used so
+"one missed month should not drag the whole score down — a subscription with a
+skipped charge is still a subscription". It did not do that: a monthly
+subscription with one month skipped has a 60-day gap, which is 30 days from the
+median, scoring it badly *and* printing "30±30 days apart" — a range from
+nothing to two months, offered as evidence. Measured against the nearest
+multiple it is exactly on cycle with one charge absent, which is both true and
+checkable. For every gap of roughly one cycle the two measures are identical, so
+no existing candidate's evidence changed.
+
+**Why the multiple is capped at two.** Uncapped, every long gap is close to
+*some* multiple and the measurement means nothing for exactly the runs it exists
+to reject. The first attempt allowed three and introduced a false positive that
+had not existed before: four cinema tickets 30, 90 and 32 days apart became
+"monthly, with two charges missing" — arithmetically available, and not what
+happened. One skipped charge is a subscription somebody paused; two is a guess
+about a gap in which anything could have occurred. ADR-031's asymmetry decides
+it: a missed subscription costs the user nothing, a false one is a confident
+wrong claim about their money.
+
+**A missing charge is now named in the evidence and costs confidence.** "Exactly
+30 days apart" for a run containing a 60-day gap is technically defensible and
+reads as a claim about charges nobody made, so the sentence says how many appear
+to be absent, and a run with a hole in it cannot reach *high*.
+
+**What the numbers are, and why they are not fitted.** Over a year of realistic
+history, genuine subscriptions sit below 0.10 on this measure and the rejected
+runs sat between 0.69 and 0.84. The threshold is chosen from the middle of a
+wide gap rather than tuned against an edge case.
+
+**Known, and stated in the code rather than implied:** at these settings the
+ceiling *subsumes* the regularity floor — the average can never exceed the
+maximum, so passing `max ≤ 0.4 × median` already guarantees a regularity of 0.6
+against a floor of 0.55. `MIN_REGULARITY` is kept because it is the constraint
+that binds if the ceiling is ever relaxed, and there is a test asserting the
+relationship, so raising `MAX_OFF_CYCLE` past 0.45 fails loudly instead of
+quietly dropping a floor nobody remembers.
+
+**Rejected:** raising `MIN_REGULARITY`. It would have to go to roughly 0.75 to
+catch these runs, which would also reject genuine subscriptions with ordinary
+weekend jitter — punishing every candidate for a failure specific to a few.

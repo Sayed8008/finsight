@@ -20,7 +20,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1147 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1162 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -135,7 +135,7 @@ refreshes the pickers on every screen that is already open (ADR-037), and the
 three requests that can take real time — import, export, detection — say so
 before they block, since every request in this client is synchronous (ADR-038).
 
-**Tests** — 1147 passing: security, money, budget-arithmetic, billing-cycle,
+**Tests** — 1162 passing: security, money, budget-arithmetic, billing-cycle,
 recurrence, CSV-format, rate-limit and demo-data unit tests; model/constraint and
 repository tests against real MySQL; API tests for every feature area; and GUI
 tests via pytest-qt, including pixel checks on things no geometry assertion can
@@ -159,10 +159,10 @@ not a plan, and nothing here is required for the project to be finished.
 3. **Requests off the event loop.** Import, export and detection say they are
    working before they block (ADR-038), which is honest rather than responsive.
    The real fix touches every view and needs a cancelled state on each.
-4. **A tighter regularity floor for detection.** Candidates come back marked
-   *Possible* with evidence like "82±70 days apart" — self-refuting, and
-   correctly the lowest confidence level, but noise that costs credibility. The
-   fix is a maximum spread relative to the median, not a higher `MIN_REGULARITY`.
+4. **Detection over more than a year.** The lookback defaults to 365 days,
+   which is one yearly charge and therefore never enough to propose a yearly
+   subscription — it needs three. Detecting those needs a longer window and a
+   different confidence story, not a threshold change.
 5. **Deleting an account.** There is no endpoint, and adding one is not one line:
    `users` cascades to `categories`, but `transactions.category_id` is `ON DELETE
    RESTRICT`, so the cascade fails for any account that has ever recorded
@@ -278,11 +278,10 @@ not a plan, and nothing here is required for the project to be finished.
   subscription already attached to it keeps working. Deliberate — the same
   reasoning as a transaction keeping its category — and it means a retired
   category can still appear on the budgets screen.
-- Detection's lowest confidence level can propose genuine noise: a candidate
-  whose evidence reads "82±70 days apart" is not regular by any reading. It is
-  marked *Possible* and the sentence refutes itself, which is ADR-032 working —
-  but it is still a proposal that should not have been made. The fix is a
-  ceiling on spread relative to the median, not a higher regularity floor.
+- Detection tolerates exactly one missed charge in a run and no more
+  (ADR-040), so a subscription that was paused for two months and resumed is
+  seen as two shorter runs, each probably too short to propose. Deliberate, and
+  the conservative direction.
 - Detection proposes rent and utility bills alongside subscriptions. They are
   genuinely recurring, so these are true positives rather than false ones, but
   somebody expecting only streaming services will read them as noise.

@@ -112,7 +112,35 @@ CYCLE_DAYS: dict[BillingCycle, float] = {
 CYCLE_TOLERANCE = 0.25
 
 #: Below this regularity a run of charges is not a subscription, it is a habit.
+#: A floor on the *typical* gap, where `MAX_OFF_CYCLE` is a ceiling on the
+#: worst one. See `is_regular_enough` for how the two relate — at the current
+#: settings the ceiling is the binding constraint and this is a backstop.
 MIN_REGULARITY = 0.55
+
+#: How far a single gap may sit from a whole number of cycles, as a share of
+#: the cycle. The check regularity cannot make: a run whose gaps are mostly
+#: tidy survives one wild gap easily, because the average deviation barely
+#: moves. "98±69 days apart" scored 0.68 and was proposed — a sentence that
+#: refutes itself, which is exactly what ADR-032 says the evidence must never
+#: do. Real subscriptions in a year of history sit under 0.10; the runs this
+#: rejects sat between 0.69 and 0.84, so the value is chosen from a wide gap
+#: rather than fitted to an edge.
+MAX_OFF_CYCLE = 0.4
+
+#: The most cycles one gap may span: two, meaning a single missed charge.
+#:
+#: Without any bound, every long gap is near *some* multiple of the cycle and
+#: the measurement means nothing for exactly the runs it exists to reject. The
+#: first draft allowed three, and it introduced a false positive that had not
+#: been there before — four cinema tickets 30, 90 and 32 days apart were read
+#: as "monthly, with two charges missing", which is arithmetically available
+#: and is not what happened. One skipped charge is a subscription somebody
+#: paused; two is a guess about a gap in which anything could have occurred.
+#:
+#: The asymmetry from ADR-031 decides it again: missing a real subscription
+#: costs the user nothing, while proposing a false one is a confident wrong
+#: claim about their money.
+MAX_SKIPPED_CYCLES = 2
 
 
 class Confidence(StrEnum):
@@ -251,6 +279,10 @@ class Interval:
     median_days: int
     spread_days: int
     regularity: float
+    #: How many charges appear to be absent — gaps that are two or three cycles
+    #: long rather than one. Named in the evidence, because a run described as
+    #: "exactly 30 days apart" that contains a 60-day gap is overstating itself.
+    missed_charges: int = 0
 
 
 def gaps_between(dates: list[date]) -> list[int]:
@@ -271,13 +303,45 @@ def closest_cycle(median_days: float) -> BillingCycle | None:
     return None
 
 
+def cycles_in(gap: int, median_days: float) -> int:
+    """How many whole cycles a gap looks like, capped at `MAX_SKIPPED_CYCLES`.
+
+    One for an ordinary gap, two where a charge appears to have been missed.
+    Capped because an uncapped search finds *some* multiple near any long gap,
+    which would make the distance below meaningless for exactly the runs it
+    exists to reject.
+    """
+    return min(
+        range(1, MAX_SKIPPED_CYCLES + 1),
+        key=lambda count: abs(gap - count * median_days),
+    )
+
+
+def off_cycle_days(gap: int, median_days: float) -> float:
+    """How far a gap sits from the nearest whole number of cycles.
+
+    The measurement everything else here is built on, and deliberately not
+    "distance from the median gap". A monthly subscription that skips one month
+    has a 60-day gap: measured against the median that is 30 days out, which
+    scores it as badly irregular and prints "30±30 days apart" — a range from
+    nothing to two months, offered as evidence. Measured against the nearest
+    multiple it is exactly on cycle, with one charge missing, which is both
+    true and checkable.
+    """
+    return abs(gap - cycles_in(gap, median_days) * median_days)
+
+
 def score_intervals(dates: list[date]) -> Interval | None:
     """How regular a set of charges is, and which cycle it fits.
 
-    Regularity is one minus the average deviation from the median gap, as a
-    share of that gap. Deviation from the *median* rather than the mean,
-    because one missed month should not drag the whole score down — a
-    subscription with a skipped charge is still a subscription.
+    Every gap is measured against the nearest whole number of cycles (see
+    `off_cycle_days`) rather than against the median gap itself, so a run with
+    a charge missing is scored on the rhythm it kept rather than on the hole.
+
+    This still only *measures*. Both thresholds — `MIN_REGULARITY` on the
+    typical gap and `MAX_OFF_CYCLE` on the worst one — are applied by
+    `is_regular_enough`, so the numbers and the policy stay separable and each
+    is testable without the other.
     """
     gaps = gaps_between(dates)
     if len(gaps) < MIN_OCCURRENCES - 1:
@@ -291,16 +355,51 @@ def score_intervals(dates: list[date]) -> Interval | None:
     if cycle is None:
         return None
 
-    deviations = [abs(gap - median_gap) for gap in gaps]
+    deviations = [off_cycle_days(gap, median_gap) for gap in gaps]
     average_deviation = sum(deviations) / len(deviations)
     regularity = max(0.0, 1.0 - average_deviation / median_gap)
 
     return Interval(
         cycle=cycle,
         median_days=int(round(median_gap)),
-        spread_days=int(round(max(deviations))) if deviations else 0,
+        spread_days=int(round(max(deviations))),
         regularity=regularity,
+        missed_charges=sum(cycles_in(gap, median_gap) - 1 for gap in gaps),
     )
+
+
+def is_regular_enough(interval: Interval) -> bool:
+    """Whether a measured rhythm is one worth proposing.
+
+    Two checks, and it is worth being exact about how they relate rather than
+    implying they are independent:
+
+      * **the worst gap.** `MAX_OFF_CYCLE` rejects a run that is mostly tidy
+        and once was not. This is the one that does the work. An average
+        absorbs a single wild gap among several neat ones almost completely,
+        which is how charges 29, 124 and 98 days apart scored 0.68 regularity
+        and were proposed as quarterly — carrying the evidence "98±69 days
+        apart", a sentence that refutes itself.
+      * **the typical gap.** `MIN_REGULARITY` is a floor on the average
+        deviation, for a run where nothing is wildly wrong and nothing is
+        right either.
+
+    At the current settings the second cannot fire: the average deviation is
+    never greater than the worst one, so passing the ceiling
+    (`max ≤ 0.4 × median`) guarantees a regularity of at least 0.6, which is
+    already above the 0.55 floor. It is kept because it is the constraint that
+    would bind if the ceiling were ever relaxed, and losing it silently is the
+    kind of thing that happens when a threshold is tuned a year later. There is
+    a test asserting exactly that relationship, so raising `MAX_OFF_CYCLE` past
+    0.45 fails loudly rather than quietly dropping a floor.
+
+    Checked against the *rounded* figures, which are the ones the evidence
+    prints. The rule is then exactly the claim the user reads: the spread shown
+    is within `MAX_OFF_CYCLE` of the interval shown.
+    """
+    if interval.regularity < MIN_REGULARITY:
+        return False
+    return interval.spread_days <= interval.median_days * MAX_OFF_CYCLE
 
 
 # ─── Step 4: confidence and evidence ──────────────────────────────────────
@@ -309,12 +408,19 @@ def score_intervals(dates: list[date]) -> Interval | None:
 def rate_confidence(occurrences: int, interval: Interval, amounts: list[Decimal]) -> Confidence:
     """Turn the measurements into a level.
 
-    Three inputs, all of which have to be good for HIGH: enough charges to rule
-    out coincidence, gaps that hold their rhythm, and amounts that barely move.
+    Four inputs, all of which have to be good for HIGH: enough charges to rule
+    out coincidence, gaps that hold their rhythm, amounts that barely move, and
+    no gap in the record. A run with a charge missing may well be a
+    subscription, but a hole in the evidence is a reason to claim less.
     """
     identical_amounts = len(set(amounts)) == 1
 
-    if occurrences >= 4 and interval.regularity >= 0.85 and identical_amounts:
+    if (
+        occurrences >= 4
+        and interval.regularity >= 0.85
+        and identical_amounts
+        and not interval.missed_charges
+    ):
         return Confidence.HIGH
     if occurrences >= 3 and interval.regularity >= 0.7:
         return Confidence.MEDIUM
@@ -334,7 +440,20 @@ def describe(occurrences: int, amount: Decimal, interval: Interval, varied_amoun
         else f"exactly {interval.median_days} days apart"
     )
     amount_text = f"about {amount:,.2f}" if varied_amounts else f"{amount:,.2f}"
-    return f"{occurrences} charges of {amount_text}, {when}."
+
+    # A gap of two cycles is on cycle by the measurement and still a hole in
+    # the history. Saying "exactly 30 days apart" without mentioning it would
+    # be technically defensible and would read as a claim about charges nobody
+    # made.
+    missing = interval.missed_charges
+    gap_note = (
+        f" — {missing} charge{'s' if missing != 1 else ''} in that run appear"
+        f"{'' if missing != 1 else 's'} to be missing"
+        if missing
+        else ""
+    )
+
+    return f"{occurrences} charges of {amount_text}, {when}{gap_note}."
 
 
 # ─── Putting it together ──────────────────────────────────────────────────
@@ -373,7 +492,7 @@ def _candidate_from(merchant: str, cluster: list[Charge]) -> Candidate | None:
 
     ordered = sorted(cluster, key=lambda charge: charge.date)
     interval = score_intervals([charge.date for charge in ordered])
-    if interval is None or interval.regularity < MIN_REGULARITY:
+    if interval is None or not is_regular_enough(interval):
         return None
 
     amounts = [charge.amount for charge in ordered]
@@ -412,6 +531,8 @@ def _most_common_category(charges: list[Charge]) -> int | None:
 
 __all__ = [
     "AMOUNT_TOLERANCE",
+    "MAX_OFF_CYCLE",
+    "MAX_SKIPPED_CYCLES",
     "MIN_OCCURRENCES",
     "Candidate",
     "Charge",
@@ -420,11 +541,14 @@ __all__ = [
     "amounts_match",
     "cluster_by_amount",
     "closest_cycle",
+    "cycles_in",
     "describe",
     "detect",
     "display_name",
     "gaps_between",
+    "is_regular_enough",
     "normalise_description",
+    "off_cycle_days",
     "rate_confidence",
     "score_intervals",
 ]
