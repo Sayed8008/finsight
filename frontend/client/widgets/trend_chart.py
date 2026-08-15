@@ -176,13 +176,47 @@ class TrendChart(QStackedWidget):
         series.hovered.connect(self._on_hover)
         self.chart.addSeries(series)
 
+        labels = self._axis_labels(months)
         self._category_axis.clear()
-        self._category_axis.append([self._month_label(month, months) for month in months])
+        self._category_axis.append(labels)
+        # Twenty-four "Sep 24"s do not fit across the panel, and Qt's answer to
+        # a label that does not fit is to elide it — a row reading "S… O… N…"
+        # names no month at all. Turned on their side they fit, so the long
+        # form is rotated and the short one left flat.
+        self._category_axis.setLabelsAngle(-90 if self._is_long_form(labels) else 0)
         series.attachAxis(self._category_axis)
 
         self._value_axis.setRange(0, self._axis_maximum(months))
         self._value_axis.applyNiceNumbers()
         series.attachAxis(self._value_axis)
+
+    @classmethod
+    def _axis_labels(cls, months: tuple[MonthTotals, ...]) -> list[str]:
+        """One label per month, and every one of them distinct.
+
+        `QBarCategoryAxis` treats its categories as a *set of names*: appending
+        a label it already holds is silently ignored. So a span long enough to
+        repeat a month name loses a category per repeat, and every bar after
+        the first duplicate sits under the wrong label.
+
+        Reported for the 24-month span, where it is worst: twenty-four bars
+        kept only fourteen labels — "Sep 25" was followed by "Jan 26" — and the
+        chart quietly misattributed a year and a half of history. Twelve months
+        and under were unaffected, which is why it was not seen sooner.
+
+        So uniqueness decides the format rather than taste: the short form is
+        used while it stays unambiguous, and the year goes on every label the
+        moment it does not.
+        """
+        short = [cls._month_label(month, months) for month in months]
+        if len(set(short)) == len(short):
+            return short
+        return [f"{month.first_day:%b %y}" for month in months]
+
+    @staticmethod
+    def _is_long_form(labels: list[str]) -> bool:
+        """Whether every label carries a year, and so needs the room."""
+        return len(labels) > 1 and all(" " in label for label in labels)
 
     @staticmethod
     def _month_label(month: MonthTotals, months: tuple[MonthTotals, ...]) -> str:
@@ -237,6 +271,14 @@ class TrendChart(QStackedWidget):
             for bar_set in series.barSets():
                 result[bar_set.label()] = [bar_set.at(i) for i in range(bar_set.count())]
         return result
+
+    @property
+    def labels_angle(self) -> float:
+        """The rotation applied to the month labels."""
+        for axis in self.chart.axes():
+            if isinstance(axis, QBarCategoryAxis):
+                return axis.labelsAngle()
+        return 0
 
     @property
     def month_labels(self) -> list[str]:

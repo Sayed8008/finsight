@@ -186,6 +186,38 @@ Either half alone: `./scripts/dev.sh backend` or `./scripts/dev.sh client`.
 - API: <http://127.0.0.1:8000>
 - Interactive API documentation: <http://127.0.0.1:8000/docs>
 
+### Two terminals, without the script
+
+The script is a convenience; it starts these. Run them by hand when you want
+the backend to survive a client restart, or to watch either half's log on its
+own. Both paths are relative to the project root, and on Windows the
+interpreter is `..\.venv\Scripts\python`.
+
+**Backend** — `--reload` restarts it when you edit the API:
+
+```bash
+cd backend && ../.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+**Frontend**, in a second terminal:
+
+```bash
+cd frontend && ../.venv/bin/python -m client.main
+```
+
+`cd` first, then `-m`: run as a module from `frontend/` so that `client.*`
+imports resolve. Start the backend first — the client opens without it, but the
+sidebar says *Disconnected* and every action fails until it is up.
+
+On Python 3.14 the `../.venv/…` interpreter prints a harmless
+`RuntimeWarning: Unexpected value in sys.prefix` before the client starts. To
+avoid it, run either half from the project root instead, with no `cd`:
+
+```bash
+.venv/bin/python -m uvicorn app.main:app --app-dir backend --port 8000 --reload
+.venv/bin/python frontend/client/main.py
+```
+
 ---
 
 ## Trying it with real data

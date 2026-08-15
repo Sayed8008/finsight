@@ -193,6 +193,122 @@ def test_month_labels_name_the_year_where_it_turns_over(qtbot) -> None:
     assert chart.month_labels == ["Dec 25", "Jan 26", "Feb"]
 
 
+# ─── A label for every bar, whatever the span ─────────────────────────────
+#
+# Reported from manual testing: the months under the bars did not line up on
+# the longer spans. `QBarCategoryAxis` holds its categories as a set of names
+# and silently ignores one it already has, so a span long enough to repeat a
+# month name lost a category per repeat. Twenty-four months kept fourteen
+# labels — "Sep 25" was followed by "Jan 26" — and every bar after the first
+# duplicate sat under the wrong month.
+#
+# Twelve months and under never repeat a name, which is why the default span
+# looked right and this went unseen.
+
+
+def span(count: int, *, end_year: int = 2026, end_month: int = 8) -> tuple[MonthTotals, ...]:
+    """`count` consecutive months ending at the given one."""
+    months = []
+    year, number = end_year, end_month
+    for _ in range(count):
+        months.append(month(year, number, "1000.00", "500.00"))
+        number -= 1
+        if number == 0:
+            year, number = year - 1, 12
+    return tuple(reversed(months))
+
+
+@pytest.mark.parametrize("count", [3, 6, 12, 13, 24])
+def test_every_bar_has_its_own_label(qtbot, count: int) -> None:
+    """The bug, as the property it broke: one label per bar, always."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+
+    chart.set_months(span(count))
+
+    assert len(chart.month_labels) == count
+    assert len(set(chart.month_labels)) == count, "duplicate labels are silently dropped"
+
+
+def test_a_two_year_span_names_the_year_on_every_label(qtbot) -> None:
+    """Twenty-four months cannot be told apart by month name alone, so the
+    short form is abandoned rather than allowed to collide."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+
+    chart.set_months(span(24))
+
+    assert chart.month_labels[0] == "Sep 24"
+    assert chart.month_labels[12] == "Sep 25"
+    assert chart.month_labels[-1] == "Aug 26"
+
+
+def test_the_labels_stay_in_step_with_the_bars(qtbot) -> None:
+    """The consequence worth pinning: bar *i* is month *i*."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+    months = span(24)
+
+    chart.set_months(months)
+
+    assert chart.month_labels == [f"{m.first_day:%b %y}" for m in months]
+    assert len(chart.series_values["Income"]) == len(chart.month_labels)
+
+
+def test_shortening_the_span_replaces_every_label(qtbot) -> None:
+    """The span control is how this was found — 24 months, then 3."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+
+    chart.set_months(span(24))
+    chart.set_months(span(3))
+
+    assert chart.month_labels == ["Jun 26", "Jul", "Aug"]
+
+
+def test_long_labels_are_turned_rather_than_elided(qtbot) -> None:
+    """Twenty-four "Sep 24"s do not fit across the panel, and Qt elides what
+    does not fit — a row reading "S... O... N..." names no month at all."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+
+    chart.set_months(span(24))
+
+    assert chart.labels_angle == -90
+
+
+def test_short_labels_are_left_flat(qtbot) -> None:
+    """Rotating labels that already fit would be a cost with no benefit."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+
+    chart.set_months(span(12))
+
+    assert chart.labels_angle == 0
+
+
+def test_the_angle_is_reset_when_the_span_shortens(qtbot) -> None:
+    """The axis is reused, so an angle set for 24 months would otherwise stay."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+
+    chart.set_months(span(24))
+    chart.set_months(span(6))
+
+    assert chart.labels_angle == 0
+
+
+def test_a_short_span_keeps_the_uncluttered_labels(qtbot) -> None:
+    """Uniqueness decides the format, so a span that never repeats a name must
+    not be given a year on every label to pay for the fix."""
+    chart = TrendChart()
+    qtbot.addWidget(chart)
+
+    chart.set_months(span(6))
+
+    assert chart.month_labels == ["Mar 26", "Apr", "May", "Jun", "Jul", "Aug"]
+
+
 def test_an_empty_span_shows_words_not_flat_bars(qtbot) -> None:
     chart = TrendChart()
     qtbot.addWidget(chart)
