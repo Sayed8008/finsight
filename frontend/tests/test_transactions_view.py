@@ -22,7 +22,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 
 from client.api.client import ApiError
-from client.api.dto import Category, Transaction, TransactionPage
+from client.api.dto import Category, ImportPreview, ImportResult, Transaction, TransactionPage
 from client.models.transaction_table import (
     AMOUNT,
     CATEGORY,
@@ -34,6 +34,7 @@ from client.models.transaction_table import (
     TransactionTableModel,
 )
 from client.views.transactions_view import ANY_DATE, EMPTY_PAGE, TABLE_PAGE, TransactionsView
+from client.widgets.import_dialog import ImportDialog
 from client.widgets.transaction_dialog import TransactionDialog
 
 pytestmark = pytest.mark.gui
@@ -78,6 +79,9 @@ class StubApi:
         self.created: list[dict[str, Any]] = []
         self.updated: list[tuple[int, dict[str, Any]]] = []
         self.deleted: list[int] = []
+        self.exports: list[dict[str, Any]] = []
+        self.previews: list[dict[str, Any]] = []
+        self.imports: list[dict[str, Any]] = []
 
     # The two calls made when the view first opens.
     def categories(self, **_: Any) -> list[Category]:
@@ -108,6 +112,41 @@ class StubApi:
 
     def delete_transaction(self, transaction_id: int) -> None:
         self.deleted.append(transaction_id)
+
+    # ─── CSV ──────────────────────────────────────────────────────────────
+
+    def export_transactions(self, **filters: Any) -> bytes:
+        self.exports.append(filters)
+        return "﻿Date,Amount\r\n2026-03-15,250.00\r\n".encode()
+
+    def preview_import(self, content: bytes, **options: Any) -> ImportPreview:
+        self.previews.append({"content": content, **options})
+        return ImportPreview(
+            total_rows=1,
+            would_import=1,
+            failed_rows=0,
+            duplicate_rows=0,
+            blockers=(),
+            ambiguous_dates=0,
+            encoding="utf-8-sig",
+            columns=("amount", "date"),
+            sample=(),
+            problems=(),
+            duplicates=(),
+            categories=(),
+            digest="a" * 64,
+        )
+
+    def import_transactions(self, content: bytes, **options: Any) -> ImportResult:
+        self.imports.append({"content": content, **options})
+        return ImportResult(
+            imported=3,
+            skipped_duplicates=1,
+            skipped_invalid=0,
+            created_categories=("Skydiving",),
+            first_date=date(2026, 3, 1),
+            last_date=date(2026, 3, 31),
+        )
 
     # ─── Helpers for assertions ───────────────────────────────────────────
 
@@ -758,3 +797,112 @@ def test_the_primary_button_is_actually_painted(qtbot) -> None:
     assert image.width() > 0 and image.height() > 0
     assert background != QColor("#ffffff"), "the primary button is painted white on white"
     assert background == QColor("#1a56c4")
+
+
+# ─── Importing and exporting ──────────────────────────────────────────────
+
+
+def test_the_export_carries_the_filters_on_screen(view: TransactionsView, tmp_path) -> None:
+    """"Export what I am looking at" has to mean what it says, or the file is
+    a different set of rows from the table above it."""
+    view.search_input.setText("netflix")
+    view.type_filter.setCurrentIndex(2)
+    api_of(view).exports.clear()
+
+    view.save_export(str(tmp_path / "out.csv"))
+
+    assert api_of(view).exports[-1]["search"] == "netflix"
+    assert api_of(view).exports[-1]["transaction_type"] == "expense"
+
+
+def test_the_export_reaches_disk_byte_for_byte(view: TransactionsView, tmp_path) -> None:
+    """Written as bytes: decoding and re-encoding would be a chance to lose
+    the byte-order mark that lets Excel open the file as UTF-8."""
+    path = tmp_path / "out.csv"
+
+    view.save_export(str(path))
+
+    assert path.read_bytes().startswith("﻿".encode())
+    assert "2026-03-15,250.00" in path.read_text(encoding="utf-8-sig")
+
+
+def test_the_export_says_what_it_wrote(view: TransactionsView, tmp_path) -> None:
+    view.save_export(str(tmp_path / "out.csv"))
+
+    assert "Exported 1 transaction to out.csv" in view.banner.text()
+
+
+def test_a_file_that_cannot_be_written_is_reported(view: TransactionsView, tmp_path) -> None:
+    """A silent failure here means the user believes they have a backup."""
+    view.save_export(str(tmp_path / "no-such-folder" / "out.csv"))
+
+    assert "Could not write that file" in view.banner.text()
+
+
+def test_the_suggested_filename_is_dated(view: TransactionsView) -> None:
+    """Two files called transactions.csv in a downloads folder are
+    indistinguishable, and the one thing anybody wants is which is newer."""
+    assert view.suggested_export_name().startswith("finsight-transactions-")
+    assert view.suggested_export_name().endswith(".csv")
+
+
+def test_a_file_that_cannot_be_read_is_reported_without_opening_a_dialog(
+    view: TransactionsView, tmp_path
+) -> None:
+    view.open_import(str(tmp_path / "missing.csv"))
+
+    assert "Could not read that file" in view.banner.text()
+    assert api_of(view).previews == []
+
+
+def test_opening_a_file_for_import_reads_nothing_until_asked(
+    view: TransactionsView, tmp_path, monkeypatch
+) -> None:
+    """Choosing a file is not the same act as importing it (ADR-007's rule,
+    applied to a second feature that can change somebody's data)."""
+    path = tmp_path / "statement.csv"
+    path.write_bytes(b"Date,Amount,Type,Category\n2026-03-04,10.00,expense,Food\n")
+    monkeypatch.setattr(ImportDialog, "exec", lambda self: 0)
+
+    view.open_import(str(path))
+
+    assert api_of(view).previews == []
+    assert api_of(view).imports == []
+
+
+def test_a_successful_import_refreshes_the_screen_and_says_what_happened(
+    view: TransactionsView, tmp_path, monkeypatch
+) -> None:
+    """Including what it left out — a message naming only what was imported
+    leaves the user wondering what became of the rest."""
+    path = tmp_path / "statement.csv"
+    path.write_bytes(b"Date,Amount,Type,Category\n2026-03-04,10.00,expense,Food\n")
+
+    def check_and_import(dialog: ImportDialog) -> int:
+        dialog.check_file()
+        dialog.run_import()
+        return 1
+
+    monkeypatch.setattr(ImportDialog, "exec", check_and_import)
+    api_of(view).reset()
+
+    view.open_import(str(path))
+
+    assert api_of(view).imports
+    assert api_of(view).calls, "the table was not reloaded after the import"
+    assert "Imported 3 transactions" in view.banner.text()
+    assert "1 already recorded and left out" in view.banner.text()
+    assert "Created: Skydiving" in view.banner.text()
+
+
+def test_a_cancelled_import_leaves_the_screen_alone(
+    view: TransactionsView, tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "statement.csv"
+    path.write_bytes(b"Date,Amount,Type,Category\n2026-03-04,10.00,expense,Food\n")
+    monkeypatch.setattr(ImportDialog, "exec", lambda self: 0)
+    api_of(view).reset()
+
+    view.open_import(str(path))
+
+    assert api_of(view).calls == []

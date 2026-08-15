@@ -14,7 +14,9 @@ if the backend ever moves off the machine.
 from __future__ import annotations
 
 import logging
+from datetime import date
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QDate, Qt, QTimer
@@ -22,6 +24,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDateEdit,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -40,6 +43,7 @@ from client.api.client import ApiClient, ApiError
 from client.api.dto import EXPENSE, INCOME, Category, Transaction, TransactionPage
 from client.models.transaction_table import COLUMNS, DESCRIPTION, TransactionTableModel
 from client.widgets.forms import LabelledWidget, MessageBanner
+from client.widgets.import_dialog import ImportDialog
 from client.widgets.transaction_dialog import TransactionDialog
 
 logger = logging.getLogger(__name__)
@@ -116,6 +120,23 @@ class TransactionsView(QWidget):
         row.addWidget(self.count_label)
 
         row.addStretch(1)
+
+        self.import_button = QPushButton("Import")
+        self.import_button.setObjectName("SecondaryButton")
+        self.import_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.import_button.setToolTip(
+            "Read transactions from a CSV file. Nothing is written until you have "
+            "seen what it would do."
+        )
+        self.import_button.clicked.connect(self.import_transactions)
+        row.addWidget(self.import_button)
+
+        self.export_button = QPushButton("Export")
+        self.export_button.setObjectName("SecondaryButton")
+        self.export_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.export_button.setToolTip("Save the transactions matching the current filters as CSV.")
+        self.export_button.clicked.connect(self.export_transactions)
+        row.addWidget(self.export_button)
 
         self.add_button = QPushButton("Add transaction")
         self.add_button.setObjectName("PrimaryButton")
@@ -585,6 +606,102 @@ class TransactionsView(QWidget):
         if len(self._page.items) == 1 and self._current_page > 1:
             self._current_page -= 1
         self.reload()
+
+    # ─── Importing and exporting ──────────────────────────────────────────
+
+    def export_transactions(self) -> None:
+        """Save the transactions matching the current filters as a CSV file."""
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export transactions",
+            self.suggested_export_name(),
+            "CSV files (*.csv)",
+        )
+        if path:
+            self.save_export(path)
+
+    def suggested_export_name(self) -> str:
+        """A filename that says what the file is and when it was taken.
+
+        Dated, because an export is a snapshot: two files called
+        `transactions.csv` in a downloads folder are indistinguishable, and the
+        one thing anybody wants to know is which is newer.
+        """
+        return f"finsight-transactions-{date.today():%Y-%m-%d}.csv"
+
+    def save_export(self, path: str) -> None:
+        """Fetch the filtered transactions and write them to `path`.
+
+        Separate from the file chooser so the whole thing can be exercised
+        without a native dialog — the part worth testing is that the export
+        carries the filters and reaches disk, not that Qt can pick a folder.
+
+        Written as bytes exactly as they arrived: decoding and re-encoding here
+        would be a chance to lose the byte-order mark that lets Excel open the
+        file as UTF-8.
+        """
+        try:
+            document = self._api.export_transactions(**self.filter_arguments())
+        except ApiError as exc:
+            self._show_error(exc)
+            return
+
+        try:
+            Path(path).write_bytes(document)
+        except OSError as exc:
+            logger.warning("Could not write export to %s: %s", path, exc)
+            self.banner.show_error(f"Could not write that file: {exc.strerror or exc}.")
+            return
+
+        rows = self._page.total
+        self.banner.show_info(
+            f"Exported {rows} transaction{'s' if rows != 1 else ''} to {Path(path).name}."
+        )
+
+    def import_transactions(self) -> None:
+        """Choose a CSV file and review what importing it would do."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import transactions", "", "CSV files (*.csv);;All files (*)"
+        )
+        if path:
+            self.open_import(path)
+
+    def open_import(self, path: str) -> None:
+        """Read a file from disk and hand it to the import dialog.
+
+        The file is read here rather than inside the dialog so that a file that
+        cannot be opened at all reports itself on this screen, instead of
+        opening a dialog whose only content is an error.
+        """
+        try:
+            content = Path(path).read_bytes()
+        except OSError as exc:
+            logger.warning("Could not read %s: %s", path, exc)
+            self.banner.show_error(f"Could not read that file: {exc.strerror or exc}.")
+            return
+
+        dialog = ImportDialog(
+            content,
+            api_client=self._api,
+            filename=Path(path).name,
+            categories=self._categories,
+            currency=self._currency,
+            parent=self,
+        )
+        dialog.exec()
+
+        if dialog.result is None:
+            return
+
+        # An import can create categories, so the filter list is refreshed as
+        # well as the page — otherwise a newly imported category would be
+        # filterable only after navigating away and back.
+        self._current_page = 1
+        self.refresh_categories()
+        self.reload()
+        # After the reload, not before: `reload` clears the banner on success,
+        # which would wipe the one message the user actually wants to read.
+        self.banner.show_info(dialog.result.summary)
 
     def _payment_method_values(self) -> list[str]:
         return [

@@ -878,12 +878,105 @@ QCheckBox::indicator:disabled {
 #CandidateBadge[confidence="medium"] { background-color: #fdf0e3; color: #b8620f; }
 #CandidateBadge[confidence="low"]    { background-color: #eef0f3; color: #6b7480; }
 
+/* ─── Import report ─────────────────────────────────────────────────────── */
+
+#ReportCard {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-radius: 8px;
+}
+
+/* A blocker is the reason an import will not run, so it carries the same red
+ * edge an exceeded budget does — one colour, one meaning, across the app. */
+#BlockerCard {
+    background-color: #fdeceb;
+    border: 1px solid #f3c4c0;
+    border-left: 3px solid #b4232c;
+    border-radius: 8px;
+}
+
+#BlockerText {
+    font-size: 13px;
+    color: #9c1f19;
+    background-color: transparent;
+}
+
+/* A report describing options that have since changed. Amber rather than red:
+ * nothing is wrong, but the figures below it are no longer the ones that would
+ * apply, and the largest number on the page must not go on looking current. */
+#StaleCard {
+    background-color: #fdf0e3;
+    border: 1px solid #f0d6b4;
+    border-left: 3px solid #d9782e;
+    border-radius: 8px;
+}
+
+#StaleTitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #b8620f;
+    background-color: transparent;
+}
+
+#StaleText {
+    font-size: 12px;
+    color: #8a5314;
+    background-color: transparent;
+}
+
+#ReportTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#ReportLine {
+    font-size: 13px;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+#ReportMuted {
+    font-size: 12px;
+    color: #8b939c;
+    background-color: transparent;
+}
+
+#ReportBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9px;
+    background-color: #eef0f3;
+    color: #6b7480;
+}
+
+/* Settled means the import knows what to do with it. Unsettled is a decision
+ * still waiting on the user, and is named in words as well as coloured. */
+#ReportBadge[settled="true"]  { background-color: #e6f4ec; color: #1a7f4b; }
+#ReportBadge[settled="false"] { background-color: #fdf0e3; color: #b8620f; }
+
+#SampleHeader {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7480;
+    background-color: transparent;
+}
+
+#SampleCell {
+    font-size: 12px;
+    color: #1c2024;
+    background-color: transparent;
+}
+
 /* ─── Dialogs ───────────────────────────────────────────────────────────── */
 
 #TransactionDialog,
 #BudgetDialog,
 #SubscriptionDialog,
-#DetectionDialog {
+#DetectionDialog,
+#ImportDialog {
     background-color: #ffffff;
 }
 
@@ -892,7 +985,8 @@ QCheckBox::indicator:disabled {
 #TransactionDialog QLabel,
 #BudgetDialog QLabel,
 #SubscriptionDialog QLabel,
-#DetectionDialog QLabel {
+#DetectionDialog QLabel,
+#ImportDialog QLabel {
     background-color: transparent;
 }
 

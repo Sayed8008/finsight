@@ -22,6 +22,8 @@ from client.api.dto import (
     Comparison,
     Dashboard,
     Detection,
+    ImportPreview,
+    ImportResult,
     Insights,
     Subscription,
     SubscriptionSummary,
@@ -102,7 +104,13 @@ class ApiClient:
         self.close()
 
     # ─── Requests ─────────────────────────────────────────────────────────
-    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    def _send(self, method: str, path: str, **kwargs: Any) -> Any:
+        """Make a request, translating every network failure into `ApiError`.
+
+        Separate from `_request` so that a response which is not JSON — a CSV
+        download — goes through exactly the same error handling rather than a
+        second copy of it.
+        """
         headers = {**self._auth_headers(), **kwargs.pop("headers", {})}
         try:
             response = self._http.request(method, path, headers=headers, **kwargs)
@@ -119,9 +127,17 @@ class ApiClient:
                 status_code=response.status_code,
             )
 
+        return response
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        response = self._send(method, path, **kwargs)
         if not response.content:
             return None
         return response.json()
+
+    def _download(self, method: str, path: str, **kwargs: Any) -> bytes:
+        """A response kept as bytes, for a file rather than a payload."""
+        return self._send(method, path, **kwargs).content
 
     @staticmethod
     def _friendly_error(response: Any) -> str:
@@ -361,6 +377,79 @@ class ApiClient:
             ),
         )
         return Detection.from_json(payload)
+
+    # ─── CSV import and export ────────────────────────────────────────────
+    def export_transactions(
+        self,
+        *,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        transaction_type: str | None = None,
+        category_id: int | None = None,
+        payment_method: str | None = None,
+        amount_min: str | None = None,
+        amount_max: str | None = None,
+        search: str | None = None,
+    ) -> bytes:
+        """The filtered transactions as a CSV document.
+
+        The same filters the list takes, so "export what I am looking at" means
+        exactly that. Returned as bytes rather than text because the file is
+        written to disk unchanged — decoding it here only to encode it again
+        would be a chance to lose the byte-order mark Excel needs.
+        """
+        params = _without_none(
+            {
+                "date_from": date_from,
+                "date_to": date_to,
+                "transaction_type": transaction_type,
+                "category_id": category_id,
+                "payment_method": payment_method,
+                "amount_min": amount_min,
+                "amount_max": amount_max,
+                "search": search,
+            }
+        )
+        return self._download("GET", f"{self._v1}/csv/transactions", params=params)
+
+    def preview_import(
+        self, content: bytes, *, filename: str = "transactions.csv", **options: Any
+    ) -> ImportPreview:
+        """Ask what importing this file would do. Creates nothing.
+
+        The `digest` in the reply is what the import needs. There is
+        deliberately no way to import a file without previewing it first.
+        """
+        payload = self._request(
+            "POST",
+            f"{self._v1}/csv/preview",
+            files={"file": (filename, content, "text/csv")},
+            params=_without_none(options),
+        )
+        return ImportPreview.from_json(payload)
+
+    def import_transactions(
+        self,
+        content: bytes,
+        *,
+        digest: str,
+        filename: str = "transactions.csv",
+        **options: Any,
+    ) -> ImportResult:
+        """Apply a previewed file.
+
+        `digest` came from the preview and covers the file *and* the options,
+        so the server can refuse anything that has changed since. The file is
+        sent again rather than being held server-side between the two calls —
+        there is then no state to go stale.
+        """
+        payload = self._request(
+            "POST",
+            f"{self._v1}/csv/import",
+            files={"file": (filename, content, "text/csv")},
+            params={**_without_none(options), "digest": digest},
+        )
+        return ImportResult.from_json(payload)
 
     # ─── Dashboard ────────────────────────────────────────────────────────
     def dashboard(

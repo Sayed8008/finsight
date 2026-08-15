@@ -760,3 +760,239 @@ class Detection:
     def empty(cls) -> Detection:
         today = date_type.today()
         return cls(today, today, ())
+
+
+# ─── CSV import ───────────────────────────────────────────────────────────
+
+#: How the file writes its dates, mirroring the server's `DateOrder`. Asked for
+#: rather than guessed: `03/04/2026` is two different days.
+ISO_DATES = "iso"
+DAY_FIRST = "day_first"
+MONTH_FIRST = "month_first"
+
+DATE_ORDER_LABELS = {
+    ISO_DATES: "Year first — 2026-03-04",
+    DAY_FIRST: "Day first — 04/03/2026",
+    MONTH_FIRST: "Month first — 03/04/2026",
+}
+
+#: What to do about a category name this account does not have.
+REFUSE = "refuse"
+CREATE = "create"
+
+#: What the import will do about one category name, mirroring `CategoryAction`.
+CATEGORY_ACTION_LABELS = {
+    "matched": "already yours",
+    "create": "will be created",
+    "unknown": "not in this account",
+    "inactive": "deactivated",
+    "wrong_type": "exists for the other direction",
+}
+
+DUPLICATE_SOURCE_LABELS = {
+    "file": "repeated in this file",
+    "history": "already recorded",
+}
+
+
+@dataclass(frozen=True)
+class PreviewRow:
+    """One row of a file, as the server read it.
+
+    Shown so the reading can be checked. Seeing `2026-03-04` come back out of
+    `04/03/2026` is how somebody notices the wrong date order in two seconds
+    rather than in six months.
+    """
+
+    line_number: int
+    date: date_type
+    amount: Decimal
+    transaction_type: str
+    category_name: str | None
+    description: str | None
+    payment_method: str | None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> PreviewRow:
+        return cls(
+            line_number=int(payload["line_number"]),
+            date=date_type.fromisoformat(payload["date"]),
+            amount=Decimal(payload["amount"]),
+            transaction_type=payload["transaction_type"],
+            category_name=payload.get("category_name"),
+            description=payload.get("description"),
+            payment_method=payload.get("payment_method"),
+        )
+
+    @property
+    def is_income(self) -> bool:
+        return self.transaction_type == INCOME
+
+
+@dataclass(frozen=True)
+class RowProblem:
+    """One reason one row cannot be imported."""
+
+    line_number: int
+    column: str
+    value: str
+    message: str
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> RowProblem:
+        return cls(
+            line_number=int(payload["line_number"]),
+            column=payload["column"],
+            value=payload["value"],
+            message=payload["message"],
+        )
+
+
+@dataclass(frozen=True)
+class DuplicateRow:
+    """A row that already exists, and where it already exists."""
+
+    line_number: int
+    date: date_type
+    amount: Decimal
+    description: str
+    source: str
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> DuplicateRow:
+        return cls(
+            line_number=int(payload["line_number"]),
+            date=date_type.fromisoformat(payload["date"]),
+            amount=Decimal(payload["amount"]),
+            description=payload["description"],
+            source=payload["source"],
+        )
+
+    @property
+    def source_label(self) -> str:
+        return DUPLICATE_SOURCE_LABELS.get(self.source, self.source)
+
+
+@dataclass(frozen=True)
+class CategoryPlan:
+    """One category name the file used, and what will become of it."""
+
+    name: str
+    category_type: str
+    action: str
+    rows: int
+    category_id: int | None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> CategoryPlan:
+        return cls(
+            name=payload["name"],
+            category_type=payload["category_type"],
+            action=payload["action"],
+            rows=int(payload["rows"]),
+            category_id=payload.get("category_id"),
+        )
+
+    @property
+    def action_label(self) -> str:
+        return CATEGORY_ACTION_LABELS.get(self.action, self.action)
+
+    @property
+    def is_settled(self) -> bool:
+        return self.action in ("matched", "create")
+
+
+@dataclass(frozen=True)
+class ImportPreview:
+    """Everything an import would do, having done none of it.
+
+    `digest` is what turns "preview then commit" into something the server can
+    enforce: it fingerprints the file *and* the options, and the import will
+    not run without it.
+    """
+
+    total_rows: int
+    would_import: int
+    failed_rows: int
+    duplicate_rows: int
+    blockers: tuple[str, ...]
+    ambiguous_dates: int
+    encoding: str
+    columns: tuple[str, ...]
+    sample: tuple[PreviewRow, ...]
+    problems: tuple[RowProblem, ...]
+    duplicates: tuple[DuplicateRow, ...]
+    categories: tuple[CategoryPlan, ...]
+    digest: str
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> ImportPreview:
+        return cls(
+            total_rows=int(payload["total_rows"]),
+            would_import=int(payload["would_import"]),
+            failed_rows=int(payload["failed_rows"]),
+            duplicate_rows=int(payload["duplicate_rows"]),
+            blockers=tuple(payload["blockers"]),
+            ambiguous_dates=int(payload["ambiguous_dates"]),
+            encoding=payload["encoding"],
+            columns=tuple(payload["columns"]),
+            sample=tuple(PreviewRow.from_json(row) for row in payload["sample"]),
+            problems=tuple(RowProblem.from_json(row) for row in payload["problems"]),
+            duplicates=tuple(DuplicateRow.from_json(row) for row in payload["duplicates"]),
+            categories=tuple(CategoryPlan.from_json(row) for row in payload["categories"]),
+            digest=payload["digest"],
+        )
+
+    @property
+    def is_blocked(self) -> bool:
+        return bool(self.blockers)
+
+    @property
+    def can_import(self) -> bool:
+        return not self.is_blocked and self.would_import > 0
+
+
+@dataclass(frozen=True)
+class ImportResult:
+    """What an import actually did."""
+
+    imported: int
+    skipped_duplicates: int
+    skipped_invalid: int
+    created_categories: tuple[str, ...]
+    first_date: date_type | None
+    last_date: date_type | None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> ImportResult:
+        first = payload.get("first_date")
+        last = payload.get("last_date")
+        return cls(
+            imported=int(payload["imported"]),
+            skipped_duplicates=int(payload["skipped_duplicates"]),
+            skipped_invalid=int(payload["skipped_invalid"]),
+            created_categories=tuple(payload["created_categories"]),
+            first_date=date_type.fromisoformat(first) if first else None,
+            last_date=date_type.fromisoformat(last) if last else None,
+        )
+
+    @property
+    def summary(self) -> str:
+        """One sentence naming everything that happened, including the nothing.
+
+        A message that says only what was imported leaves the user to wonder
+        what became of the rest, which is the question a skipped row raises.
+        """
+        parts = [f"Imported {self.imported} transaction{'s' if self.imported != 1 else ''}"]
+        if self.first_date and self.last_date:
+            parts.append(f" from {self.first_date:%d %b %Y} to {self.last_date:%d %b %Y}")
+        parts.append(".")
+
+        if self.skipped_duplicates:
+            parts.append(f" {self.skipped_duplicates} already recorded and left out.")
+        if self.skipped_invalid:
+            parts.append(f" {self.skipped_invalid} could not be read and left out.")
+        if self.created_categories:
+            parts.append(f" Created: {', '.join(self.created_categories)}.")
+
+        return "".join(parts)

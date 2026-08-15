@@ -3,7 +3,7 @@
 Where the project stands, and what comes next. Updated at the end of each
 phase.
 
-**Last updated:** 2026-08-15 · **Current state:** Phase 9.5 complete
+**Last updated:** 2026-08-15 · **Current state:** Phase 10 complete
 
 ---
 
@@ -20,7 +20,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 851 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1043 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -42,8 +42,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 851 passed
 | 8 | Analytics: aggregation endpoints, period comparison, charts | ✅ done |
 | 9 | Insights: rule engine, severity, explanations | ✅ done |
 | 9.5 | **Subscription auto-detection** from transaction history | ✅ done |
-| 10 | CSV import (preview then commit) and export | ⬜ next |
-| 11 | Polish: error/empty/loading states, logging, theming | ⬜ |
+| 10 | CSV import (preview then commit) and export | ✅ done |
+| 11 | Polish: error/empty/loading states, logging, theming | ⬜ next |
 | 12 | Packaging, README, screenshots, demo script | ⬜ |
 
 Testing is not a phase. Tests are written within each phase, and every phase
@@ -89,6 +89,9 @@ ends with a green run.
 | `GET /api/v1/analytics/comparison` | a period against the one before it |
 | `GET /api/v1/insights` | what is worth knowing, each explaining itself |
 | `POST /api/v1/subscriptions/detect` | propose subscriptions found in history; creates nothing |
+| `GET /api/v1/csv/transactions` | the filtered set as a CSV file, oldest first |
+| `POST /api/v1/csv/preview` | what an import would do; writes nothing |
+| `POST /api/v1/csv/import` | apply a previewed file, in one transaction |
 
 There is no `DELETE /categories/{id}` — see ADR-020. The budget endpoints take
 an optional `as_of` date, which decides `is_current` and `days_remaining`; it
@@ -99,7 +102,7 @@ exists so those fields can be tested without waiting for the calendar.
 existed, and everything they compute is derived, never stored (ADR-015).
 
 **Desktop client** — PySide6. Login and registration screens, then a shell
-with sidebar navigation. Five real sections:
+with sidebar navigation. Six real sections:
 
 - **Dashboard** — a hero figure and stat tiles, a ranked spending chart, recent
   activity, and one line naming whatever needs attention.
@@ -118,48 +121,58 @@ The Subscriptions screen also has **Find subscriptions**, which searches
 transaction history for recurring charges and reviews the candidates one at a
 time. Nothing is created without being chosen (ADR-007).
 
-A sixth section, **Insights**, lists what the rules found. Only
-**Settings** is still a placeholder.
+The Transactions screen has **Import** and **Export**. Import opens a review
+dialog that reads the file, reports what importing it would do, and keeps its
+own button disabled until that has happened — changing any option puts it back
+to disabled and marks the report out of date, because a preview describes a file
+read one particular way (ADR-033).
 
-**Tests** — 851 passing: security, money, budget-arithmetic and billing-cycle
-unit tests; model/constraint and repository tests against real MySQL; API tests
-for every feature area; and GUI tests via pytest-qt, including pixel checks on
-things no geometry assertion can catch.
+Only **Settings** is still a placeholder.
+
+**Tests** — 1043 passing: security, money, budget-arithmetic, billing-cycle,
+recurrence and CSV-format unit tests; model/constraint and repository tests
+against real MySQL; API tests for every feature area; and GUI tests via
+pytest-qt, including pixel checks on things no geometry assertion can catch.
 
 ---
 
-## Next: Phase 10 — CSV import and export
+## Next: Phase 11 — Polish
 
-The last feature phase. Import is the one place a user can destroy their own
-data in a single click, so the whole design is about making that impossible.
+The features are done. What is left is everything the demo will be judged on
+that is not a feature: the states a screen is in when it is not showing data,
+the one section that is still a placeholder, and the details that have been
+listed as known limitations for nine phases.
 
-1. **Export** — the easy half. Filtered transactions to CSV, amounts as plain
-   decimal text.
-2. **Import: preview** — parse, validate every row, and show what *would*
-   happen. Nothing is written.
-3. **Import: commit** — apply a previewed batch, in one transaction.
+1. **Settings, which is still a placeholder.** The category endpoints exist and
+   are tested; there is no screen. It is the last inert item in the sidebar and
+   the most visible gap.
+2. **Loading states.** Every request in this client is synchronous, so a slow
+   one freezes the window with no indication why. Nothing is perceptible against
+   localhost — but export and import are the first requests that can take real
+   time, because they are the first bounded by file size rather than by page
+   size.
+3. **Error and empty states, audited rather than assumed.** Most screens have
+   them. Whether every screen has a *distinct* one for "nothing yet" and
+   "nothing matches these filters" has not been checked in one pass.
+4. **Rate limiting on login.** Listed as a known limitation since Phase 3, and
+   the only one on the list that is a security gap rather than a scope decision.
+5. **Chart tooltips**, if there is time. The spending and trend charts have
+   none; values are readable from the axis and the labels, so this is polish in
+   the literal sense.
 
 **Watch out for:**
 
-- **Preview then commit, never a single step.** A malformed file that half
-  imports is worse than one that does not import at all. The commit must be one
-  database transaction that rolls back whole.
-- Amounts arrive as text from a spreadsheet: `1,234.56`, `1 234,56`, `(50.00)`
-  for negatives, a currency symbol. Parse deliberately with `Decimal`, and
-  reject what cannot be read rather than guessing (ADR-003).
-- Dates are worse than amounts. `03/04/2026` is two different days depending on
-  where the file came from. Ask, or require ISO, but do not guess.
-- Every row needs a category, and the file will name ones that do not exist.
-  Decide up front: create them, map them, or refuse — and say which in the
-  preview.
-- A file with 5,000 rows must not become 5,000 inserts one at a time, nor
-  5,000 category lookups. Load the category map once.
-- Import is the natural feeder for detection (9.5): a year of imported history
-  is exactly what makes `POST /subscriptions/detect` worth running.
+- The rendering practice (ADR-012) has caught a real defect in every UI phase,
+  including this one — the stale import report went on claiming "412 of 418 rows
+  would be imported" for a reading nobody had chosen. Render the Settings screen
+  and look at it before writing a test for it.
+- A category screen has to deal with ADR-020: there is no DELETE, so the verb is
+  "deactivate", and the screen has to show deactivated categories in a way that
+  makes restoring them possible without making them look active.
+- A loading state that appears for two milliseconds is worse than none. If one
+  is added, it needs a delay before it shows.
 
-**Deliberately deferred:** polish (11), packaging (12).
-
----
+**Then Phase 12:** packaging, README, screenshots, demo script.
 
 ## Known limitations, recorded on purpose
 
@@ -225,3 +238,27 @@ data in a single click, so the whole design is about making that impossible.
 - `POST /subscriptions` accepts a `next_billing_date` in the body and ignores
   it, rather than rejecting the request. Pydantic drops unknown fields; the
   derived value always wins.
+- A raw bank statement cannot be imported as it stands: every row needs a
+  category, because `transactions.category_id` is NOT NULL and there is no
+  "uncategorised" row (ADR-006). The import takes an optional fallback category
+  instead of inventing one, so it takes one extra choice rather than an edit to
+  the file.
+- The importer reads no date format that spells its month — `4 Mar 2026` is
+  refused. Three numbers with a stated order, or nothing.
+- Duplicate detection ignores rows with no description, so re-importing a file
+  of undescribed rows will double them. Deliberate, and the same asymmetry as
+  ADR-031: an extra row is visible and deletable, a wrongly skipped one is data
+  silently lost.
+- The import reads the whole file into memory and answers in one request. Fine
+  at the 5,000-row ceiling; a file large enough to need streaming would need a
+  job, which is a service rather than a desktop app.
+- Import and export are synchronous like every other request, so a large file
+  blocks the window while it is read. The first place where that could actually
+  be felt, since these are the only requests bounded by file size rather than
+  page size. Phase 11.
+- An import cannot be undone. Nothing records which transactions arrived
+  together, so "undo that import" would need a batch id on every row — worth it
+  only if imports become routine.
+- A file previewed while another window changes the same categories could be
+  refused at commit for a reason the preview did not show. The refusal is
+  correct and the window is milliseconds; nothing pretends otherwise.

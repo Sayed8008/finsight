@@ -32,6 +32,11 @@ from app.models.transaction import Transaction
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 200
 
+#: The most rows one export will build. Not a page — an export is the whole
+#: filtered set by definition — but a bound on how large a string one request
+#: can be asked to assemble.
+MAX_EXPORT_ROWS = 50_000
+
 
 class SortField(StrEnum):
     """A column the transaction list may be ordered by."""
@@ -142,6 +147,36 @@ class TransactionRepository:
 
         rows = list(self._session.execute(statement).scalars())
         return rows, self.count(user_id, filters)
+
+    def list_all(
+        self, user_id: int, filters: TransactionFilters | None = None
+    ) -> list[Transaction]:
+        """Every matching transaction, oldest first, with its category loaded.
+
+        For export, which is the one caller that genuinely wants the whole
+        result rather than a page — a page of an export is not an export. It
+        goes through `_filter_clauses` like everything else, so "export what I
+        am looking at" cannot come to mean something different from what the
+        table is showing.
+
+        Oldest first, unlike the list: a CSV is read top to bottom as a
+        statement, and a statement runs forwards.
+
+        `MAX_EXPORT_ROWS` is a ceiling rather than a page. It exists so that one
+        request cannot be asked to build an unbounded string in memory; at this
+        data size nobody reaches it, and the endpoint says so if they do.
+        """
+        filters = filters or TransactionFilters()
+
+        statement: Select[tuple[Transaction]] = (
+            select(Transaction)
+            .join(Transaction.category)
+            .options(contains_eager(Transaction.category))
+            .where(*self._filter_clauses(user_id, filters))
+            .order_by(Transaction.date.asc(), Transaction.id.asc())
+            .limit(MAX_EXPORT_ROWS)
+        )
+        return list(self._session.execute(statement).scalars())
 
     def count(self, user_id: int, filters: TransactionFilters | None = None) -> int:
         """How many transactions match, ignoring pagination."""

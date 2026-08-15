@@ -684,3 +684,134 @@ shows the sentence and a word.
 figures they were built from. Both come from the same rule — a finance
 application that cannot say *why* it said something is worse than one that says
 nothing.
+
+---
+
+## ADR-033 — Import is preview then commit, and the commit is fingerprinted
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Importing a CSV is two requests. `POST /csv/preview` reads the file, resolves
+every category, finds every duplicate and reports everything an import would do,
+writing nothing. `POST /csv/import` does it again and only then writes — and it
+will not run without the `digest` the preview returned.
+
+**Why two requests.** A single endpoint has to decide by itself what to do about
+an unreadable row or a category name the account does not have, and every one of
+those decisions is one the user should be shown before it is made. Import is the
+only place in this application where a single click can put thousands of wrong
+rows into somebody's financial history.
+
+**Why a fingerprint rather than a stored preview.** The obvious alternative is to
+keep the parsed batch server-side and let the commit refer to it by id. That is a
+piece of state with a lifetime, an eviction policy, and a window in which it
+stops describing the file. The digest is `sha256(file bytes + options)`: it has
+none of those, it survives a restart, and re-planning costs the same handful of
+queries the preview did.
+
+It covers the **options** as well as the bytes, which is the part that earns it.
+Without that, a file previewed as day-first could be imported as month-first, and
+every date would land a different day from the one the user was shown — a defect
+with no symptom until months later.
+
+**All or nothing.** The write is one transaction that rolls back whole, including
+any categories created on the way. A file that half imports is worse than one
+that does not import at all, because nobody can tell which half landed. Tested by
+failing partway through and asserting that no row and no category survives.
+
+**The defaults refuse.** An unknown category stops the import; an unreadable row
+stops the import; a row already recorded is left out. The permissive versions —
+create the categories, import the readable rows, keep the duplicates — all exist,
+and the interface can only offer them *after* the preview has named exactly what
+they would do. That is the difference between a choice and a shrug.
+
+**Rejected:** a "dry run" flag on one endpoint. It is the same two calls with the
+safety made optional, and the version without the flag is the one that gets
+called.
+
+**Nothing per row that can be done once.** Categories are one query, duplicate
+detection is one query over the file's own date range, and the rows go in through
+a Core `insert()` in chunks of 500 rather than as ORM objects — the ORM would
+round-trip each row to fetch an id nothing wants. A test imports 10 rows and then
+200 and asserts the statement count barely moves; an N+1 import is functionally
+perfect and unusable, and only counting catches it.
+
+---
+
+## ADR-034 — The CSV reader asks rather than guesses
+**Date:** 2026-08-15 · **Status:** Accepted
+
+`transaction_csv.py` is pure — text in, values out, no session and no clock, the
+same shape as `budget_utilisation`, `billing_cycle`, `insight_rules` and
+`recurrence`. Reading a spreadsheet is not parsing a data format; it is guessing,
+and the rule here is to guess as little as possible and be loud about the rest.
+
+**Dates are stated.** `03/04/2026` is the third of April in Dhaka and the fourth
+of March in Detroit, and nothing in the file says which. The caller supplies the
+order and a value that does not fit is refused rather than reinterpreted.
+Detection was rejected: it works only on files that happen to contain a day past
+the twelfth, so it would succeed on most files and fail silently on exactly the
+ones where every date is ambiguous.
+
+Rows that *would* read as a different day the other way round are counted and
+reported, so the preview can say "14 of these read differently the other way"
+rather than presenting one reading as a fact.
+
+**Direction is never assumed.** A row says which way money moved, through a type
+column or through the sign of its amount. A bare `500.00` with neither is
+refused; so is a row marked income carrying a negative amount, because something
+is wrong with the file and either reading writes a figure the file does not
+support. "Probably an expense" is a guess about somebody's finances.
+
+**Amounts are parsed deliberately.** `1,234.56`, `1.234,56`, `(50.00)`, `৳1 234`,
+`50.00-`, a Unicode minus and an en dash all mean something definite and are all
+read. A third decimal place does not: money here has two places, so `12.3456` is
+refused rather than rounded into disagreeing with the statement it came from.
+
+**The one place it does decide, stated rather than left to a branch:** a lone
+separator followed by exactly three digits is a thousands separator, so `1,234`
+and `1.234` are both 1234. The alternative reading gives a number with three
+decimal places, which is not money.
+
+**Consequence:** a raw bank statement with no category column cannot be imported
+as it stands, since `transactions.category_id` is NOT NULL and there is no
+"uncategorised" row to hide behind (ADR-006). Rather than invent one, the import
+takes an optional fallback category, which the preview names.
+
+---
+
+## ADR-035 — An export is data first, and cannot be a payload
+**Date:** 2026-08-15 · **Status:** Accepted
+
+`GET /csv/transactions` writes ISO dates, plain decimal amounts with no
+thousands separator and no currency symbol, and a byte-order mark.
+
+**Why plain.** The file is data before it is a report. Formatting an amount means
+the reader has to undo the formatting to get a number back, and ISO is the one
+date order that cannot be read two ways. Both choices are what make the export
+readable straight back in — there is a test that exports one account and imports
+it into another with no option changed, which is the only check that covers both
+halves at once.
+
+**Why the byte-order mark.** Without one, Excel opens a UTF-8 file as the
+machine's local codepage, which turns "৳" and "Müller" into rubble. The reader
+strips a BOM whether or not we wrote it, because a file that has been through
+Excel has one either way.
+
+**Formula injection.** A description of `=HYPERLINK(...)` is text in this
+application and a formula the moment the export is opened in a spreadsheet. Free
+text is written with a leading apostrophe when it starts `=`, `+`, `-` or `@`,
+which Excel eats. The reader removes that apostrophe again only when it stands in
+front of a formula character, so a description that genuinely begins `'twas`
+keeps its quote and a defused one round-trips unchanged.
+
+**Not paginated.** An export is the whole matching set by definition; a page of
+one is a quietly truncated file that looks complete. It reuses the list's filter
+clauses so that "export what I am looking at" cannot come to mean something else,
+and takes a `MAX_EXPORT_ROWS` ceiling so one request cannot be asked to build an
+unbounded string.
+
+**Where the routes live.** Under their own `/csv` prefix rather than on the
+transactions router: `/transactions/{transaction_id}` is declared there, and a
+later `/transactions/export` would be handed to that `int` path parameter and
+rejected before reaching its own handler. A separate prefix removes the trap
+instead of documenting it.
