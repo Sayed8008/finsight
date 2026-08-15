@@ -531,3 +531,52 @@ is printed beside each bar so the part-to-whole reading is not lost.
 
 **Corollary:** past six categories the tail is folded into one "Other
 categories" row, computed server-side so the shares still sum to 100.
+
+---
+
+## ADR-027 — Chart series use a measured colour pair, not the app's green/red
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Income and expense are shown **green and red wherever an amount carries a
+sign**, and **blue and orange in the trend chart**.
+
+**Why the inconsistency is deliberate.** In a table or a list, the sign does the
+work: `+8,000.00` and `−250.00` are unambiguous before colour is considered, and
+green/red only reinforces what the character already said. In the trend chart
+there is no sign — both series are positive bar heights — so colour is the
+*only* thing separating them.
+
+Measured, `#1a7f4b` and `#b4232c` are **ΔE 4.5** apart under deuteranopia: the
+same colour to roughly one man in twelve. Blue `#1a56c4` and orange `#d9782e`
+are **ΔE 29.7** apart under the same simulation and pass every other check too.
+The chart uses those, with a legend naming both.
+
+**Rejected:** keeping green/red and adding a pattern fill. Secondary encoding
+rescues a pair in the ΔE 6–8 band; 4.5 is below even that, and a chart nobody
+can read without the texture is not fixed by the texture.
+
+**Also here:** grouped bars rather than stacked. Stacking income onto expense
+would imply the two add up to something — they do not, and the quantity worth
+seeing is the gap between them.
+
+---
+
+## ADR-028 — Independent requests track failure independently
+**Date:** 2026-08-15 · **Status:** Accepted
+
+A screen that makes more than one request records which of them are failing,
+rather than keeping a single "something went wrong" flag.
+
+**Why:** the analytics screen fetches a trend and a comparison separately, and
+with one flag the second succeeding cleared the banner the first had set. A
+failed request vanished with nothing on screen to say it had happened.
+
+**Found by:** a test asserting the error was visible after a load in which one
+request failed and the other did not.
+
+**How:** failures are held in a dict keyed by request name; the banner shows
+whatever is still failing, deduplicated so two requests failing because the
+backend is down say it once.
+
+**Applies to:** any future screen making more than one call. The dashboard is
+unaffected, since it makes exactly one by design.

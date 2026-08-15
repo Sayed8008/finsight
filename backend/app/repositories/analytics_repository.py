@@ -40,6 +40,24 @@ class PeriodTotals:
 
 
 @dataclass(frozen=True)
+class MonthTotals:
+    """One calendar month's income and expense."""
+
+    year: int
+    month: int
+    income: Decimal
+    expense: Decimal
+
+    @property
+    def net(self) -> Decimal:
+        return self.income - self.expense
+
+    @property
+    def first_day(self) -> date:
+        return date(self.year, self.month, 1)
+
+
+@dataclass(frozen=True)
 class CategoryTotal:
     """One category's spend, with enough to render it."""
 
@@ -133,6 +151,58 @@ class AnalyticsRepository:
         return [
             CategoryTotal(category_id=row_id, name=name, color=color, total=Decimal(amount))
             for row_id, name, color, amount in self._session.execute(statement)
+        ]
+
+    def monthly_series(self, user_id: int, start: date, end: date) -> list[MonthTotals]:
+        """Income and expense per calendar month, in one query.
+
+        Grouped by `YEAR`/`MONTH` rather than by a formatted string: grouping
+        on `DATE_FORMAT(date, '%Y-%m')` sorts lexically, which happens to be
+        right for ISO order and quietly wrong the moment anyone changes the
+        format. Two integers sort numerically and cannot be misread.
+
+        This is the query ADR-005 exists for. SQLite's date handling differs
+        from MySQL's, so a green run against SQLite here would say nothing at
+        all about whether it works.
+
+        Only months with activity come back — filling the gaps needs a
+        calendar, which is the caller's job and not the database's.
+        """
+        year = func.year(Transaction.date).label("year")
+        month = func.month(Transaction.date).label("month")
+
+        income = func.coalesce(
+            func.sum(
+                func.if_(
+                    Transaction.transaction_type == TransactionType.INCOME, Transaction.amount, 0
+                )
+            ),
+            0,
+        )
+        expense = func.coalesce(
+            func.sum(
+                func.if_(
+                    Transaction.transaction_type == TransactionType.EXPENSE, Transaction.amount, 0
+                )
+            ),
+            0,
+        )
+
+        statement = (
+            select(year, month, income, expense)
+            .where(*self._in_period(user_id, start, end))
+            .group_by(year, month)
+            .order_by(year, month)
+        )
+
+        return [
+            MonthTotals(
+                year=int(row_year),
+                month=int(row_month),
+                income=Decimal(row_income),
+                expense=Decimal(row_expense),
+            )
+            for row_year, row_month, row_income, row_expense in self._session.execute(statement)
         ]
 
     def total_spend(self, user_id: int, start: date, end: date) -> Decimal:

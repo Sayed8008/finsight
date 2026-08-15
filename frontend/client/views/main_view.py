@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QWidget
 
 from client.api.client import ApiClient
 from client.api.dto import User
+from client.views.analytics_view import AnalyticsView
 from client.views.budgets_view import BudgetsView
 from client.views.dashboard_view import DashboardView
 from client.views.placeholder import PlaceholderView
@@ -28,13 +29,10 @@ TRANSACTIONS = "transactions"
 BUDGETS = "budgets"
 SUBSCRIPTIONS = "subscriptions"
 DASHBOARD = "dashboard"
+ANALYTICS = "analytics"
 
 # What each section will contain, shown until the real view is built.
 SECTION_DESCRIPTIONS: dict[str, tuple[str, str]] = {
-    "analytics": (
-        "Analytics",
-        "Spending trends and category comparisons over a chosen period.",
-    ),
     "settings": (
         "Settings",
         "Account details, categories and application preferences.",
@@ -68,6 +66,7 @@ class MainView(QWidget):
         self.transactions_view = TransactionsView(api_client)
         self.budgets_view = BudgetsView(api_client)
         self.subscriptions_view = SubscriptionsView(api_client)
+        self.analytics_view = AnalyticsView(api_client)
 
         self.pages = QStackedWidget()
         self.pages.setObjectName("ContentArea")
@@ -82,6 +81,7 @@ class MainView(QWidget):
             TRANSACTIONS: self.transactions_view,
             BUDGETS: self.budgets_view,
             SUBSCRIPTIONS: self.subscriptions_view,
+            ANALYTICS: self.analytics_view,
         }
         if key in real_views:
             return real_views[key]
@@ -126,5 +126,7 @@ class MainView(QWidget):
             self.budgets_view.load_once(self._currency)
         elif key == SUBSCRIPTIONS:
             self.subscriptions_view.load_once(self._currency)
+        elif key == ANALYTICS:
+            self.analytics_view.load_once(self._currency)
 
         self.pages.setCurrentIndex(index)

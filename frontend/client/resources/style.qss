@@ -730,6 +730,52 @@ QCheckBox::indicator:disabled {
     border: none;
 }
 
+/* ─── Analytics ─────────────────────────────────────────────────────────── */
+
+#TrendChart,
+#TrendChartView,
+#ChangeList,
+#ChangeRow {
+    background-color: transparent;
+    border: none;
+}
+
+#ChangeName {
+    font-size: 13px;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#ChangePrevious {
+    font-size: 12px;
+    color: #8b939c;
+    background-color: transparent;
+}
+
+#ChangeCurrent {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+    min-width: 110px;
+    qproperty-alignment: 'AlignRight | AlignVCenter';
+}
+
+#ChangeMovement {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7480;
+    background-color: transparent;
+    min-width: 78px;
+    qproperty-alignment: 'AlignRight | AlignVCenter';
+}
+
+/* Spending is the subject of this table, so a rise is the unwelcome
+ * direction — the arrow says which way, the colour says whether that is
+ * good news, and neither is left to carry the meaning alone. */
+#ChangeMovement[tone="positive"] { color: #1a7f4b; }
+#ChangeMovement[tone="negative"] { color: #b4232c; }
+
 /* ─── Dialogs ───────────────────────────────────────────────────────────── */
 
 #TransactionDialog,

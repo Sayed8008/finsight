@@ -455,3 +455,137 @@ class Dashboard:
             budgets=BudgetHealth(0, 0, 0, 0, 0),
             subscriptions=SubscriptionSummary.empty(),
         )
+
+
+@dataclass(frozen=True)
+class MonthTotals:
+    """One month of the trend."""
+
+    year: int
+    month: int
+    first_day: date_type
+    income: Decimal
+    expense: Decimal
+    net: Decimal
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> MonthTotals:
+        return cls(
+            year=int(payload["year"]),
+            month=int(payload["month"]),
+            first_day=date_type.fromisoformat(payload["first_day"]),
+            income=Decimal(payload["income"]),
+            expense=Decimal(payload["expense"]),
+            net=Decimal(payload["net"]),
+        )
+
+    @property
+    def label(self) -> str:
+        """Short month name; the year is added only where it changes."""
+        return f"{self.first_day:%b}"
+
+
+@dataclass(frozen=True)
+class Trend:
+    """Income and expense per month, empty months included as zeroes."""
+
+    months: tuple[MonthTotals, ...]
+    has_activity: bool
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Trend:
+        return cls(
+            months=tuple(MonthTotals.from_json(row) for row in payload["months"]),
+            has_activity=bool(payload["has_activity"]),
+        )
+
+    @classmethod
+    def empty(cls) -> Trend:
+        return cls(months=(), has_activity=False)
+
+
+@dataclass(frozen=True)
+class Change:
+    """A figure against its previous value."""
+
+    current: Decimal
+    previous: Decimal
+    difference: Decimal
+    #: None when the previous value was zero — a start, not a percentage.
+    percentage: Decimal | None
+    is_new: bool
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Change:
+        percentage = payload.get("percentage")
+        return cls(
+            current=Decimal(payload["current"]),
+            previous=Decimal(payload["previous"]),
+            difference=Decimal(payload["difference"]),
+            percentage=Decimal(percentage) if percentage is not None else None,
+            is_new=bool(payload["is_new"]),
+        )
+
+    @property
+    def rose(self) -> bool:
+        return self.difference > 0
+
+    @property
+    def fell(self) -> bool:
+        return self.difference < 0
+
+    @property
+    def unchanged(self) -> bool:
+        return self.difference == 0
+
+
+@dataclass(frozen=True)
+class CategoryChange:
+    """One category's spend, this period against last."""
+
+    category_id: int | None
+    name: str
+    color: str | None
+    change: Change
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> CategoryChange:
+        return cls(
+            category_id=payload.get("category_id"),
+            name=payload["name"],
+            color=payload.get("color"),
+            change=Change.from_json(payload["change"]),
+        )
+
+
+@dataclass(frozen=True)
+class Comparison:
+    """Two periods, side by side."""
+
+    period_start: date_type
+    period_end: date_type
+    previous_start: date_type
+    previous_end: date_type
+    income: Change
+    expense: Change
+    net: Change
+    categories: tuple[CategoryChange, ...]
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Comparison:
+        return cls(
+            period_start=date_type.fromisoformat(payload["period_start"]),
+            period_end=date_type.fromisoformat(payload["period_end"]),
+            previous_start=date_type.fromisoformat(payload["previous_start"]),
+            previous_end=date_type.fromisoformat(payload["previous_end"]),
+            income=Change.from_json(payload["income"]),
+            expense=Change.from_json(payload["expense"]),
+            net=Change.from_json(payload["net"]),
+            categories=tuple(CategoryChange.from_json(row) for row in payload["categories"]),
+        )
+
+    @classmethod
+    def empty(cls) -> Comparison:
+        today = date_type.today()
+        nothing = Change(ZERO, ZERO, ZERO, None, False)
+        return cls(today, today, today, today, nothing, nothing, nothing, ())

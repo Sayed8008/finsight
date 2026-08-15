@@ -3,7 +3,7 @@
 Where the project stands, and what comes next. Updated at the end of each
 phase.
 
-**Last updated:** 2026-08-15 · **Current state:** Phase 6 complete
+**Last updated:** 2026-08-15 · **Current state:** Phase 8 complete
 
 ---
 
@@ -20,7 +20,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 535 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 662 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -38,9 +38,9 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 535 passed
 | 4 | Transactions and categories: CRUD, filtering, pagination, data table | ✅ done |
 | 5 | Budgets: model exists; utilisation calculations and UI | ✅ done |
 | 6 | Subscriptions: model exists; cycle maths and UI | ✅ done |
-| 7 | Dashboard: financial summary, QtCharts, recent activity | ⬜ next |
-| 8 | Analytics: aggregation endpoints, period comparison, charts | ⬜ |
-| 9 | Insights: rule engine, severity, explanations | ⬜ |
+| 7 | Dashboard: financial summary, QtCharts, recent activity | ✅ done |
+| 8 | Analytics: aggregation endpoints, period comparison, charts | ✅ done |
+| 9 | Insights: rule engine, severity, explanations | ⬜ next |
 | 9.5 | **Subscription auto-detection** from transaction history | ⬜ |
 | 10 | CSV import (preview then commit) and export | ⬜ |
 | 11 | Polish: error/empty/loading states, logging, theming | ⬜ |
@@ -84,6 +84,9 @@ ends with a green run.
 | `PATCH /api/v1/subscriptions/{id}` | edit |
 | `POST /api/v1/subscriptions/{id}/renew` | record a charge, advance the date |
 | `DELETE /api/v1/subscriptions/{id}` | delete outright (not the same as cancelling) |
+| `GET /api/v1/dashboard` | the whole first screen in one payload |
+| `GET /api/v1/analytics/trend` | income and expense per month, gaps filled |
+| `GET /api/v1/analytics/comparison` | a period against the one before it |
 
 There is no `DELETE /categories/{id}` — see ADR-020. The budget endpoints take
 an optional `as_of` date, which decides `is_current` and `days_remaining`; it
@@ -94,51 +97,59 @@ exists so those fields can be tested without waiting for the calendar.
 existed, and everything they compute is derived, never stored (ADR-015).
 
 **Desktop client** — PySide6. Login and registration screens, then a shell
-with sidebar navigation. Three real sections:
+with sidebar navigation. Five real sections:
 
+- **Dashboard** — a hero figure and stat tiles, a ranked spending chart, recent
+  activity, and one line naming whatever needs attention.
 - **Transactions** — a `QAbstractTableModel` behind a `QTableView`, a filter
   bar, server-side sorting, a pager, and an add/edit dialog.
 - **Budgets** — a summary strip and one card per budget, each with a progress
   bar coloured by status, plus a set/edit dialog.
 - **Subscriptions** — a commitment strip, one card per subscription with its
   state and renewal wording, and a track/edit dialog.
+- **Analytics** — a grouped monthly trend chart, change tiles, and a table of
+  what moved against the previous period.
 
-Three of six sections are still placeholders.
+Only **Settings** is still a placeholder.
 
-**Tests** — 535 passing: security, money, budget-arithmetic and billing-cycle
+**Tests** — 662 passing: security, money, budget-arithmetic and billing-cycle
 unit tests; model/constraint and repository tests against real MySQL; API tests
-for auth, categories, transactions, budgets and subscriptions; and GUI tests
-via pytest-qt.
+for every feature area; and GUI tests via pytest-qt, including pixel checks on
+things no geometry assertion can catch.
 
 ---
 
-## Next: Phase 7 — Dashboard
+## Next: Phase 9 — Insights
 
-The first screen that reads from everything else rather than owning a table of
-its own. QtCharts ships with PySide6 and has not been used yet.
+A deterministic, explainable rule engine over data that now all exists. Every
+input it needs — budget utilisation, subscription renewals, month-on-month
+comparison — is already computed and tested.
 
-1. **Summary endpoint** — income, expenses and net for a period; balance;
-   counts. One endpoint, so the dashboard is one request rather than five.
-2. **Recent activity** — the latest handful of transactions. The existing
-   paged endpoint already serves this with `page_size=5`.
-3. **Charts** — spending by category (donut) and a month-by-month trend
-   (bars). QtCharts, rendered from data the server aggregated.
+1. **Rule engine** — each rule a small pure function over a snapshot, returning
+   zero or more insights with a severity and a written explanation. The shape
+   to copy is `budget_utilisation` / `billing_cycle`: pure, no database, unit
+   tested on its own.
+2. **Endpoint** — `GET /insights`, evaluated on read like everything else
+   (ADR-015). Nothing is stored.
+3. **Insights view** — a list ordered by severity, each saying what it found
+   and why.
 
 **Watch out for:**
 
-- The dashboard must not become five round trips. Aggregate server-side and
-  return one payload; the `spend_by_budget` join in `budget_repository.py` is
-  the pattern.
-- A chart with no data must render an empty state, not an empty axis. Every
-  other view has an empty state; charts need one too.
-- QtCharts is a separate module (`PySide6.QtCharts`) and a separate import —
-  confirm it is present in the pinned PySide6 build before designing around it.
-- Colours for category series should come from `category.color`, which is
-  already chosen to stay distinguishable. Do not invent a second palette.
-- Money stays `Decimal` up to the point a chart needs a float for a
-  coordinate. Convert at that boundary and nowhere earlier.
+- **Every insight must explain itself.** "You spent 32% more on Food" is
+  useful; "Unusual spending detected" is not. The explanation is the feature.
+- Rules must be **pure functions of a snapshot**, not services that query. That
+  is what makes them testable one at a time and what will let Phase 9.5 reuse
+  the same shape.
+- Severity is a small closed set, and the interface must not invent its own
+  thresholds — the mistake ADR-026 and the budget cards already guard against.
+- ADR-008 says reminders are a *view* over insights, not a second subsystem.
+  "Renewal in 2 days" is an insight rule, and the dashboard's attention bar
+  should eventually render insights rather than compute its own line.
+- Do not let a rule need data no endpoint returns. If one does, add it to the
+  snapshot rather than querying inside the rule.
 
-**Deliberately deferred:** period-over-period comparison (8), insight rules (9).
+**Deliberately deferred:** detection from transaction history (9.5), CSV (10).
 
 ---
 
@@ -167,6 +178,16 @@ its own. QtCharts ships with PySide6 and has not been used yet.
   whole account. A proper account-wide total belongs to the dashboard (7).
 - A budget whose category is later deactivated stays visible and editable. Only
   *attaching* a new budget to a retired category is refused.
+- Existing accounts keep the category colours seeded when they registered. The
+  validated palette (ADR-026) only reaches new accounts — the column is
+  per-user and editable, so no backfill was run.
+- The dashboard's attention line is computed in the view. It should become a
+  rendering of insights in Phase 9 (ADR-008), not a second place that decides
+  what matters.
+- The spending chart and the trend chart have no hover tooltips. Values are
+  readable from the axis and the labels; a tooltip layer is Phase 11 polish.
+- Analytics comparison always uses the immediately preceding window. Comparing
+  against the same month last year would need a second mode.
 - Renewals are recorded by hand ("Mark renewed"). Nothing advances a billing
   date automatically, because nothing runs when the app is closed. A scheduled
   job would be a service, not a desktop app.

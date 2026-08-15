@@ -19,12 +19,14 @@ import httpx2
 from client.api.dto import (
     Budget,
     Category,
+    Comparison,
     Dashboard,
     Subscription,
     SubscriptionSummary,
     Token,
     Transaction,
     TransactionPage,
+    Trend,
     User,
 )
 from client.core.config import ClientConfig
@@ -356,6 +358,23 @@ class ApiClient:
             params=_without_none({"period_start": period_start, "period_end": period_end}),
         )
         return Dashboard.from_json(payload)
+
+    # ─── Analytics ────────────────────────────────────────────────────────
+    def trend(self, *, months: int = 6) -> Trend:
+        """Income and expense per month, with empty months filled in."""
+        payload = self._request("GET", f"{self._v1}/analytics/trend", params={"months": months})
+        return Trend.from_json(payload)
+
+    def comparison(
+        self, *, period_start: str | None = None, period_end: str | None = None
+    ) -> Comparison:
+        """A period against the one before it. The window is derived server-side."""
+        payload = self._request(
+            "GET",
+            f"{self._v1}/analytics/comparison",
+            params=_without_none({"period_start": period_start, "period_end": period_end}),
+        )
+        return Comparison.from_json(payload)
 
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:

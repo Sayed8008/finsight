@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from client.api.client import ApiError, ApiUnavailableError
-from client.api.dto import Dashboard, Token, User
+from client.api.dto import Comparison, Dashboard, Token, Trend, User
 from client.views.auth_view import LOGIN_PAGE, REGISTER_PAGE
 from client.views.main_window import APP_PAGE, AUTH_PAGE, MainWindow
 from client.widgets.sidebar import NAV_ITEMS
@@ -57,6 +57,15 @@ class StubApi:
 
     def me(self) -> User:
         return USER
+
+    def trend(self, **kwargs) -> Trend:
+        """Navigating to Analytics fetches this; the shell tests only need a shape."""
+        self.calls.append("trend")
+        return Trend.empty()
+
+    def comparison(self, **kwargs) -> Comparison:
+        self.calls.append("comparison")
+        return Comparison.empty()
 
     def dashboard(self, **kwargs) -> Dashboard:
         """Signing in lands on the dashboard, so the shell fetches it at once.
