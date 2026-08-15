@@ -25,8 +25,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from client.api.dto import SavingsBadge, SavingsJourney, SavingsMonth
-from client.core.animation import FAST_MS, fade_in, stagger_in
+from client.api.dto import SavingsJourney, SavingsMonth
+from client.core.animation import stagger_in
 from client.core.formatting import percentage_text
 from client.widgets.forms import LabelledWidget
 from client.widgets.savings_chart import SavingsChart
@@ -58,7 +58,7 @@ NO_HISTORY = "No completed months yet — the journey starts once a month finish
 
 
 class SavingsJourneyPanel(QFrame):
-    """Summary tiles, a line of monthly savings, and the badges it earned."""
+    """Summary tiles and a line of monthly savings."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -76,37 +76,6 @@ class SavingsJourneyPanel(QFrame):
         self.chart = SavingsChart()
         self.chart.setMinimumHeight(220)
         box.addWidget(self.chart, stretch=1)
-
-        self._badge_row = QWidget()
-        self._badge_row.setObjectName("BadgeRow")
-        self._badge_layout = QHBoxLayout(self._badge_row)
-        self._badge_layout.setContentsMargins(0, 0, 0, 0)
-        self._badge_layout.setSpacing(8)
-        self._badge_layout.addStretch(1)
-        box.addWidget(self._badge_row)
-
-        # What each badge was awarded for, in the order the pills appear.
-        #
-        # This replaced a second line of "observations" that said the same
-        # things in different words — best month, saved more than last month,
-        # rate moved, months in a row. Two muted paragraphs repeating four
-        # facts read as padding, and the reader has to check whether the
-        # second one is saying something new. The badge reasons are anchored
-        # to something visible; the observations floated free, so they went.
-        # The server still returns them for any other reader.
-        #
-        # The detail used to live only in a tooltip, which made a row of
-        # coloured words look like decoration — the exact thing
-        # `savings_rules` says a badge must not be. Hover is also no way to
-        # read four sentences, and there is no keyboard path to a tooltip at
-        # all. So the reason is on the screen, and the tooltip stays as well
-        # for anyone who hovers one pill in particular.
-        self._badge_details = QLabel("")
-        self._badge_details.setObjectName("SavingsBadgeDetails")
-        self._badge_details.setWordWrap(True)
-        self._badge_details.setVisible(False)
-        box.addWidget(self._badge_details)
-
 
     # ─── Construction ─────────────────────────────────────────────────────
 
@@ -173,7 +142,6 @@ class SavingsJourneyPanel(QFrame):
         """
         self.chart.set_months(journey.months)
         self._render_tiles(journey)
-        self._render_badges(journey.badges)
         self._render_subtitle(journey)
         stagger_in([self.saved_tile, self.change_tile, self.rate_tile, self.best_tile])
 
@@ -181,7 +149,6 @@ class SavingsJourneyPanel(QFrame):
         """Say it could not be fetched, rather than that there is none."""
         self.chart.show_failure("Could not load your savings history", message)
         self._render_tiles(SavingsJourney.empty())
-        self._render_badges(())
         self.subtitle.setText("")
 
     def reset(self) -> None:
@@ -262,70 +229,12 @@ class SavingsJourneyPanel(QFrame):
                 ),
             )
 
-    def _render_badges(self, badges: tuple[SavingsBadge, ...]) -> None:
-        """Rebuild the row, clearing it first.
-
-        Every badge widget is removed and deleted rather than hidden. Leaving
-        them would stack one render's awards on the next — the same fault the
-        charts had, in a layout instead of a scene.
-        """
-        while self._badge_layout.count():
-            item = self._badge_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                # Unparented *now*, then deleted when Qt gets round to it.
-                # `deleteLater` alone is deferred to the next event loop turn,
-                # so two renders in quick succession — which is exactly what
-                # switching a filter twice does — would leave the first
-                # render's chips still parented, still found, and still drawn.
-                widget.setParent(None)
-                widget.deleteLater()
-
-        for badge in badges:
-            chip = QLabel(badge.title)
-            chip.setObjectName("SavingsBadge")
-            chip.setProperty("badge", badge.code)
-            chip.setToolTip(badge.detail)
-            self._badge_layout.addWidget(chip)
-            fade_in(chip, FAST_MS)
-
-        self._badge_layout.addStretch(1)
-        self._badge_row.setVisible(bool(badges))
-
-        # Titled, so a sentence can be matched to the pill it belongs to. A
-        # colon rather than a dash: several of the details contain an em dash
-        # already, and two in one clause reads as a stutter.
-        self._badge_details.setText(
-            " · ".join(f"{badge.title}: {badge.detail}" for badge in badges)
-        )
-        self._badge_details.setVisible(bool(badges))
-
     # ─── Formatting ───────────────────────────────────────────────────────
 
     def _money(self, value: Decimal) -> str:
         return f"{value:,.2f} {self._currency}".strip()
 
     # ─── For tests ────────────────────────────────────────────────────────
-
-    @property
-    def badge_titles(self) -> list[str]:
-        """The awards currently on screen, in order.
-
-        Read from the live widgets rather than from the last payload, because
-        the fault worth catching is a badge row that kept a previous render's
-        chips — which a stored list would not show.
-        """
-        return [label.text() for label in self._badge_row.findChildren(QLabel, "SavingsBadge")]
-
-    @property
-    def badge_details_text(self) -> str:
-        """What is actually on screen explaining the badges.
-
-        Read from the label rather than the payload: the fault this exists to
-        prevent is a badge whose reason is present in the data but invisible
-        to the reader.
-        """
-        return self._badge_details.text()
 
     @staticmethod
     def month_label(month: SavingsMonth) -> str:

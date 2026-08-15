@@ -1153,25 +1153,6 @@ QScrollBar::sub-page:vertical {
 
 /* ─── Savings journey ───────────────────────────────────────────────────── */
 
-/* Badges follow the insight and subscription badge shape exactly — same
-   radius, padding and weight — so a third pill on the same screen reads as
-   the same kind of object rather than a new one. Only the palette differs,
-   and each colour is one already in use. */
-#SavingsBadge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 9px;
-    background-color: #eef0f3;
-    color: #6b7480;
-}
-
-#SavingsBadge[badge="personal_best"]   { background-color: #fdf0e3; color: #b8620f; }
-#SavingsBadge[badge="consistent_saver"] { background-color: #e6f4ec; color: #1a7f4b; }
-#SavingsBadge[badge="savings_streak"]  { background-color: #e6f4ec; color: #1a7f4b; }
-#SavingsBadge[badge="strong_saver"]    { background-color: #eaf1fd; color: #1a56c4; }
-#SavingsBadge[badge="improving"]       { background-color: #eaf1fd; color: #1a56c4; }
-
 /* Both the stacked container and the view, exactly as the spending and trend
    charts do it. Styling only the view leaves the QStackedWidget around it
    painting the default background, which reads as a grey box inside the white
@@ -1182,25 +1163,6 @@ QScrollBar::sub-page:vertical {
     border: none;
 }
 
-/* The reason each badge was awarded. Same muted treatment as the
-   observations line below it — these are supporting text, not findings in
-   their own right, and giving them weight would compete with the figures in
-   the tiles above. */
-#SavingsBadgeDetails {
-    font-size: 12px;
-    color: #6b7480;
-    background-color: transparent;
-}
-
-#SavingsObservations {
-    font-size: 12px;
-    color: #6b7480;
-    background-color: transparent;
-}
-
-#BadgeRow {
-    background-color: transparent;
-}
 
 /* ─── Sidebar active indicator ──────────────────────────────────────────── */
 

@@ -343,132 +343,6 @@ def test_no_history_leaves_every_tile_blank_rather_than_zero(
     assert "No completed months yet" in panel.subtitle.text()
 
 
-def test_badges_are_rendered(panel: SavingsJourneyPanel) -> None:
-    panel.set_journey(
-        journey(
-            span(3),
-            badges=(
-                SavingsBadge(code="personal_best", title="Personal best", detail="x"),
-                SavingsBadge(code="improving", title="Improving", detail="y"),
-            ),
-        )
-    )
-
-    assert panel.badge_titles == ["Personal best", "Improving"]
-
-
-def test_a_badge_says_on_screen_why_it_was_awarded(panel: SavingsJourneyPanel) -> None:
-    """Reported from use: four coloured words with no visible explanation read
-    as decoration. The detail existed, but only in a tooltip — which cannot be
-    reached by keyboard and is no way to read four sentences.
-
-    `savings_rules` states the rule this broke: a badge that cannot say why it
-    appeared is decoration.
-    """
-    panel.set_journey(
-        journey(
-            span(3),
-            badges=(
-                SavingsBadge(
-                    code="personal_best",
-                    title="Personal best",
-                    detail="41,361.00 saved — your highest month yet.",
-                ),
-            ),
-        )
-    )
-
-    assert "Personal best" in panel.badge_details_text
-    assert "41,361.00 saved" in panel.badge_details_text
-
-
-def test_every_badge_contributes_its_reason(panel: SavingsJourneyPanel) -> None:
-    awarded = (
-        SavingsBadge(code="personal_best", title="Personal best", detail="highest yet."),
-        SavingsBadge(code="improving", title="Improving", detail="2,000.00 more."),
-    )
-    panel.set_journey(journey(span(3), badges=awarded))
-
-    for badge in awarded:
-        assert badge.title in panel.badge_details_text
-        assert badge.detail in panel.badge_details_text
-
-
-def test_the_reason_line_is_hidden_when_nothing_is_earned(panel: SavingsJourneyPanel) -> None:
-    """An empty muted line under an empty badge row is a gap in the layout."""
-    panel.set_journey(journey(span(3)))
-
-    assert panel.badge_details_text == ""
-
-
-def test_the_reasons_do_not_accumulate(panel: SavingsJourneyPanel) -> None:
-    """The line is rebuilt, not appended to — the fault the badge row itself
-    had before it was fixed."""
-    badge = SavingsBadge(code="improving", title="Improving", detail="2,000.00 more.")
-    for _ in range(4):
-        panel.set_journey(journey(span(3), badges=(badge,)))
-
-    assert panel.badge_details_text.count("Improving") == 1
-
-
-def test_the_tooltip_is_kept_as_well(panel: SavingsJourneyPanel) -> None:
-    """Putting the reason on screen does not remove it from the pill, for
-    anyone hovering one badge in particular."""
-    from PySide6.QtWidgets import QLabel
-
-    badge = SavingsBadge(code="improving", title="Improving", detail="2,000.00 more.")
-    panel.set_journey(journey(span(3), badges=(badge,)))
-    chips = [c for c in panel.findChildren(QLabel) if c.objectName() == "SavingsBadge"]
-
-    assert chips and chips[0].toolTip() == "2,000.00 more."
-
-
-def test_badges_do_not_accumulate_across_renders(panel: SavingsJourneyPanel) -> None:
-    """A layout is as capable of stacking a previous render as a chart scene."""
-    badge = SavingsBadge(code="improving", title="Improving", detail="y")
-    for _ in range(4):
-        panel.set_journey(journey(span(3), badges=(badge,)))
-
-    assert panel.badge_titles == ["Improving"]
-
-
-def test_badges_are_cleared_when_none_are_earned(panel: SavingsJourneyPanel) -> None:
-    panel.set_journey(
-        journey(span(3), badges=(SavingsBadge(code="improving", title="Improving", detail="y"),))
-    )
-
-    panel.set_journey(journey(span(3)))
-
-    assert panel.badge_titles == []
-
-
-def test_the_panel_explains_the_badges_once_and_only_once(panel: SavingsJourneyPanel) -> None:
-    """There used to be a second muted line of "observations" saying the same
-    four things as the badge reasons — best month, saved more than last month,
-    rate moved, months in a row. Two paragraphs repeating each other read as
-    padding, and the reader has to check whether the second is saying anything
-    new. Only the badge reasons remain, and nothing else on the panel repeats
-    them.
-    """
-    panel.set_journey(
-        journey(
-            span(3),
-            badges=(SavingsBadge(code="improving", title="Improving", detail="2,000.00 more."),),
-            observations=("You saved 2,000.00 more than last month.",),
-        )
-    )
-
-    from PySide6.QtWidgets import QLabel
-
-    # Not filtered by `isVisible`: the panel is not shown in a test, so every
-    # child would report hidden. Counting the labels that *carry* the text is
-    # the real question — a second one would be the duplicate line returning.
-    muted = [lab.text() for lab in panel.findChildren(QLabel) if "2,000.00 more" in lab.text()]
-
-    assert panel.badge_details_text.count("2,000.00 more.") == 1
-    assert len(muted) == 1, muted
-
-
 def test_a_failure_says_so_rather_than_claiming_no_history(
     panel: SavingsJourneyPanel,
 ) -> None:
@@ -486,7 +360,6 @@ def test_resetting_forgets_the_session(panel: SavingsJourneyPanel) -> None:
     panel.reset()
 
     assert panel.chart.point_values == []
-    assert panel.badge_titles == []
     assert panel.saved_tile.value_label.text() == "—"
     assert panel.selected_range == 12
 
@@ -591,3 +464,32 @@ def test_the_chart_is_told_the_currency(view: AnalyticsView) -> None:
     view.savings_panel.set_journey(journey((month(2026, 7, "14000.00"),)))
 
     assert "BDT" in view.savings_panel.chart.tooltip_for(0)
+
+
+def test_the_panel_shows_no_badges(panel: SavingsJourneyPanel) -> None:
+    """Badges were removed from this panel deliberately.
+
+    They were four coloured words that could not say what they meant without
+    a second paragraph explaining them, and the explanation repeated the
+    figures already in the tiles above. The server still awards them; nothing
+    on this screen renders them.
+    """
+    from PySide6.QtWidgets import QLabel
+
+    panel.set_journey(
+        journey(
+            span(3),
+            badges=(
+                SavingsBadge(
+                    code="personal_best", title="Personal best", detail="highest yet."
+                ),
+            ),
+        )
+    )
+
+    # By object name, not by text: "Personal best" is also the caption of the
+    # fourth stat tile, which stays. What must be gone is the badge pill and
+    # the sentence explaining it.
+    assert panel.findChildren(QLabel, "SavingsBadge") == []
+    assert panel.findChildren(QLabel, "SavingsBadgeDetails") == []
+    assert not any("highest yet" in lab.text() for lab in panel.findChildren(QLabel))
