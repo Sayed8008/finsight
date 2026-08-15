@@ -3,7 +3,7 @@
 Where the project stands, and what comes next. Updated at the end of each
 phase.
 
-**Last updated:** 2026-08-15 · **Current state:** Phase 11 complete
+**Last updated:** 2026-08-15 · **Current state:** Phase 12 complete — all phases done
 
 ---
 
@@ -20,7 +20,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1125 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1147 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -44,7 +44,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 1125 passed
 | 9.5 | **Subscription auto-detection** from transaction history | ✅ done |
 | 10 | CSV import (preview then commit) and export | ✅ done |
 | 11 | Polish: Settings, rate limiting, loading and empty states, tooltips | ✅ done |
-| 12 | Packaging, README, screenshots, demo script | ⬜ next |
+| 12 | Packaging, README, screenshots, demo script | ✅ done |
 
 Testing is not a phase. Tests are written within each phase, and every phase
 ends with a green run.
@@ -135,55 +135,42 @@ refreshes the pickers on every screen that is already open (ADR-037), and the
 three requests that can take real time — import, export, detection — say so
 before they block, since every request in this client is synchronous (ADR-038).
 
-**Tests** — 1125 passing: security, money, budget-arithmetic, billing-cycle,
-recurrence, CSV-format and rate-limit unit tests; model/constraint and
+**Tests** — 1147 passing: security, money, budget-arithmetic, billing-cycle,
+recurrence, CSV-format, rate-limit and demo-data unit tests; model/constraint and
 repository tests against real MySQL; API tests for every feature area; and GUI
 tests via pytest-qt, including pixel checks on things no geometry assertion can
 catch.
 
 ---
 
-## Next: Phase 12 — Packaging, README, screenshots, demo script
+## Next: nothing planned
 
-The last phase, and the only one whose audience is a reader rather than a user.
-Everything works; what is missing is the ability for somebody who has never seen
-this repository to run it, and for somebody who will never run it to understand
-what it does.
+All twelve phases are complete. What follows is a list of what somebody picking
+this up would most usefully do, in the order the reasoning below justifies —
+not a plan, and nothing here is required for the project to be finished.
 
-1. **README.** What FinSight is, the architecture in a paragraph and a diagram,
-   how to set it up from a clean checkout, and how to run the tests. It should
-   be possible to go from `git clone` to a running application by following it,
-   on a machine with nothing but Python and MySQL.
-2. **Setup that works on a clean machine.** `scripts/setup_database.sh` and
-   `scripts/dev.sh` exist and have only ever been run here. Read them as though
-   for the first time: a script that assumes a database user already exists is
-   a script that works on exactly one computer.
-3. **Screenshots.** Six sections, the import review dialog, and the detection
-   dialog. Rendered offscreen with the same practice used all along (ADR-012),
-   with realistic figures rather than lorem ipsum.
-4. **Demo script.** The order to show things in, with the data to seed first.
-   Detection and import are the two features worth building the demo around —
-   detection is the only real algorithm here, and import is what makes a year of
-   history exist to run it against.
-5. **A seed script,** if the demo needs one. A year of plausible transactions,
-   including three genuine subscriptions and one near-miss, so detection has
-   something honest to find. It is also the fastest way to take screenshots that
-   do not look empty.
+1. **Undo for an import.** The single largest gap. Nothing records which
+   transactions arrived together, so "undo that import" needs a batch id on
+   every row. Worth it the moment importing becomes routine.
+2. **A shared store for the rate limiter** (ADR-036). In-process memory means
+   the effective limit multiplies by the worker count and a restart forgets
+   everything. One line to swap, and a dependency the application does not
+   otherwise need.
+3. **Requests off the event loop.** Import, export and detection say they are
+   working before they block (ADR-038), which is honest rather than responsive.
+   The real fix touches every view and needs a cancelled state on each.
+4. **A tighter regularity floor for detection.** Candidates come back marked
+   *Possible* with evidence like "82±70 days apart" — self-refuting, and
+   correctly the lowest confidence level, but noise that costs credibility. The
+   fix is a maximum spread relative to the median, not a higher `MIN_REGULARITY`.
+5. **Deleting an account.** There is no endpoint, and adding one is not one line:
+   `users` cascades to `categories`, but `transactions.category_id` is `ON DELETE
+   RESTRICT`, so the cascade fails for any account that has ever recorded
+   anything. Deletion has to walk the tables in dependency order. Found while
+   clearing the demo account.
 
-**Watch out for:**
-
-- The report is what this is really for. The known limitations below are written
-  to be quotable — they are the difference between "I did not do that" and "I
-  decided not to do that, and here is why".
-- Screenshots taken with an empty account make the application look unfinished.
-  Seed first.
-- The README should say what was *rejected*, not only what was built. The
-  decision log has thirty-eight entries and most readers will see only the
-  README.
-
-**Deliberately out of scope:** anything that changes behaviour. Phase 12 adds no
-features, and a defect found while writing the README is a defect to record
-here, not to fix quietly at the end.
+**Where to look first:** `docs/DECISIONS.md` for why anything is the way it is,
+`README.md` for how to run it, and `docs/DEMO.md` for the order to show it in.
 
 ## Known limitations, recorded on purpose
 
@@ -291,3 +278,22 @@ here, not to fix quietly at the end.
   subscription already attached to it keeps working. Deliberate — the same
   reasoning as a transaction keeping its category — and it means a retired
   category can still appear on the budgets screen.
+- Detection's lowest confidence level can propose genuine noise: a candidate
+  whose evidence reads "82±70 days apart" is not regular by any reading. It is
+  marked *Possible* and the sentence refutes itself, which is ADR-032 working —
+  but it is still a proposal that should not have been made. The fix is a
+  ceiling on spread relative to the median, not a higher regularity floor.
+- Detection proposes rent and utility bills alongside subscriptions. They are
+  genuinely recurring, so these are true positives rather than false ones, but
+  somebody expecting only streaming services will read them as noise.
+- There is no way to delete an account. Adding one is more than an endpoint:
+  `users` cascades to `categories`, while `transactions.category_id` is `ON
+  DELETE RESTRICT`, so the cascade fails for any account that has ever recorded
+  anything. Deletion has to walk the tables in dependency order.
+- The month-to-date insights compare a partial period against a whole one, so
+  early in a month "spending is down" is arithmetically true and misleading. The
+  demo data pays salary on the first for this reason, which sidesteps the worst
+  case rather than fixing it.
+- Screenshots in `docs/screenshots/` are captured from the demo account and are
+  regenerated by hand. Nothing checks that they still match the interface, so a
+  changed screen leaves them stale until somebody re-runs the script.

@@ -58,7 +58,10 @@ class DashboardView(QWidget):
         scroll.setObjectName("DashboardScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # As needed, not never. A page wider than its viewport with the bar
+        # switched off is content nobody can reach — the panel is simply cut
+        # off at the edge with nothing to say so.
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         outer.addWidget(scroll)
 
         page = QWidget()
@@ -194,9 +197,15 @@ class DashboardView(QWidget):
 
         self.attention_label = QLabel("")
         self.attention_label.setObjectName("AttentionText")
-        row.addWidget(self.attention_label)
-
-        row.addStretch(1)
+        # Wrapped, and allowed to be narrower than its text. Without both, this
+        # is a single unbreakable line ~650px wide, and the bar's minimum width
+        # then pushes the whole dashboard past a 1280px window — where, with
+        # horizontal scrolling off, the right-hand column was simply clipped
+        # and unreachable. Found by taking the README screenshots and looking
+        # at one (ADR-012).
+        self.attention_label.setWordWrap(True)
+        self.attention_label.setMinimumWidth(160)
+        row.addWidget(self.attention_label, stretch=1)
 
         self.budgets_button = QPushButton("Open budgets")
         self.budgets_button.setObjectName("SecondaryButton")

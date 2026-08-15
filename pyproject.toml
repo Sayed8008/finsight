@@ -40,4 +40,4 @@ ignore = [
 # Without this, ruff treats our own packages as third-party and groups their
 # imports alongside fastapi/pydantic. `tests` is listed because test modules
 # import shared fixtures and helpers from `tests.conftest`.
-known-first-party = ["app", "client", "tests"]
+known-first-party = ["app", "client", "tests", "tools"]

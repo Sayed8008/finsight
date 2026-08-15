@@ -2,34 +2,55 @@
 
 > Personal finance and subscription intelligence — a desktop application.
 
-**Status:** in development (Phase 9.5 — six working sections, a deterministic
-insights engine, and automatic detection of recurring subscriptions from
-transaction history)
+**Status:** complete. Seven working sections, a deterministic insights engine,
+automatic detection of recurring subscriptions from transaction history, and CSV
+import that cannot half-happen.
 
-FinSight helps a single user understand where their money goes: spending by
-category, budget health, savings trends, and — its distinguishing feature —
+FinSight helps one person understand where their money goes: spending by
+category, budget health, trends over time, and — its distinguishing feature —
 automatic detection of recurring subscriptions hidden inside ordinary
 transaction history.
 
-FinSight does **not** connect to bank accounts or payment providers. All data is
-entered manually or imported from CSV.
+FinSight does **not** connect to banks or payment providers. Data is entered by
+hand or imported from CSV.
+
+![Dashboard](docs/screenshots/01-dashboard.png)
 
 ---
 
-## Technology stack
+## What it does
 
-| Layer | Technology |
+| | |
 |---|---|
-| Desktop client | PySide6 (Qt 6), QtCharts |
-| API | FastAPI |
-| Business logic | Python service layer |
-| Data access | SQLAlchemy 2.0 (synchronous) |
-| Migrations | Alembic |
-| Database | MySQL 8.4 (PyMySQL driver) |
-| Validation | Pydantic v2 / Pydantic Settings |
-| Testing | pytest, httpx, pytest-qt |
+| **Transactions** | Filter, sort and page through history — all of it in SQL, so "sort by amount" sorts four thousand rows rather than the twenty-five on screen |
+| **Budgets** | A limit per category per period, with spent, remaining and status recomputed on every read and stored nowhere |
+| **Subscriptions** | What recurs, what it costs per month and per year, and what renews next |
+| **Dashboard** | The whole first screen in one request, so no two figures on it come from different moments |
+| **Analytics** | Income against expense by month, and this period against the one before it |
+| **Insights** | Rules that explain themselves: every finding names the figure it found and what it was compared against |
+| **Find subscriptions** | Recurrence detection over transaction history — the one genuine algorithm here |
+| **Import / export** | CSV out, and CSV in via a preview that must be seen before it can be applied |
+| **Settings** | The account, and the categories everything else files things into |
 
-Runs on Linux and Windows.
+### The two features worth looking at
+
+**Subscription detection** reads a year of ordinary transactions and proposes
+what recurs. It normalises merchant names, clusters charges by amount with
+tolerance so a price rise stays one subscription, scores how regular the
+intervals are, and returns a sentence a person can check — *"12 charges of
+about 199.00, 31±2 days apart"* — rather than a percentage nobody can verify.
+It creates nothing; the user confirms each one.
+
+![Find subscriptions](docs/screenshots/08-find-subscriptions.png)
+
+**CSV import is two requests, not one.** The preview reads the file, resolves
+every category, finds every duplicate and reports exactly what would happen —
+writing nothing. The import applies it, and refuses to run without the
+fingerprint the preview returned. That fingerprint covers the options as well as
+the bytes, so a file previewed as day-first cannot be imported as month-first.
+Every row lands or none does.
+
+---
 
 ## Architecture
 
@@ -55,25 +76,64 @@ FastAPI routers         ← parse, delegate, return
 The GUI never touches the database. Business logic never appears in widgets or
 in route handlers.
 
-Design decisions and their rationale are recorded in
-[`docs/DECISIONS.md`](docs/DECISIONS.md); current build status and what is
-next are in [`docs/PROGRESS.md`](docs/PROGRESS.md).
+The parts that are *only* arithmetic — budget utilisation, billing cycles,
+insight rules, recurrence detection, CSV parsing, rate limiting — are pure
+modules with no session and no clock: dates and decimals in, values out. Each is
+tested directly, which is why a boundary case costs three lines to check instead
+of a database round trip.
 
-## Features
+| Layer | Technology |
+|---|---|
+| Desktop client | PySide6 (Qt 6), QtCharts |
+| API | FastAPI |
+| Data access | SQLAlchemy 2.0 (synchronous) |
+| Migrations | Alembic |
+| Database | MySQL 8.4 (PyMySQL) |
+| Validation | Pydantic v2 / Pydantic Settings |
+| Testing | pytest, httpx, pytest-qt |
 
-Planned for the first release:
+Runs on Linux and Windows.
 
-- User accounts with Argon2id password hashing and JWT-authenticated API access
-- Manual transaction entry, CSV import (with validation preview) and CSV export
-- Categories, budgets with utilisation tracking, and recurring subscriptions
-- Dashboard with financial overview and charts
-- Analytics over selectable time ranges
-- A deterministic, explainable rule-based insights engine
-- Automatic detection of recurring subscriptions from transaction history
+---
+
+## Decisions worth knowing
+
+Thirty-eight decisions are recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md),
+each with what was rejected and why. The ones that shaped the most code:
+
+- **Money is `DECIMAL` everywhere, and a JSON *string* on the wire.** A JSON
+  number is an IEEE double, so serialising an amount as a number reintroduces
+  exactly the imprecision `Decimal` was chosen to avoid (ADR-003).
+- **Derived figures are computed, never stored.** A stored total is a cache, and
+  it is wrong the moment a transaction is edited (ADR-015).
+- **Tests run against real MySQL, not SQLite.** The analytics layer depends on
+  date functions and `GROUP BY` semantics the two databases disagree about, so
+  SQLite would give passing tests for code that fails in production (ADR-005).
+- **Layout defects are found by rendering, not by reading.** Qt views are
+  screenshotted offscreen and looked at. This has caught a real defect in every
+  single interface phase — including a primary button painted in nothing, a
+  checkbox with no box, and combo boxes that had no dropdown arrow for seven
+  phases (ADR-012, ADR-022, ADR-024).
+- **Charts do not colour by category.** Measured, nine categorical hues cannot
+  be made distinguishable for every pair at once; that is a property of the
+  colour space, not of the choices. So the spending chart uses one hue and lets
+  the axis labels carry identity (ADR-026).
+- **Detection matches merchants conservatively.** A missed subscription costs
+  the user nothing. A merged pair produces a confident, wrong claim about their
+  money (ADR-031).
+- **Sign-in is throttled per address, never per email.** Throttling per email
+  would let anyone lock the owner out of their own account — the protection
+  becomes the attack (ADR-036).
+
+Known limitations are listed honestly in
+[`docs/PROGRESS.md`](docs/PROGRESS.md), including the ones that are scope
+decisions and the ones that are not.
+
+---
 
 ## Getting started
 
-Requires Python 3.11 or newer and MySQL 8.
+Requires **Python 3.11+** and **MySQL 8**.
 
 **1. Install dependencies**
 
@@ -82,83 +142,97 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-On Windows, use `.venv\Scripts\pip` instead.
+On Windows, use `.venv\Scripts\pip`.
 
 **2. Configure**
 
 ```bash
 cp .env.example .env
-python -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into SECRET_KEY
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into SECRET_KEY
 ```
 
-**3. Create the database**
+**3. Create the databases**
 
 ```bash
 ./scripts/setup_database.sh
 ```
 
-The script asks for a new password, creates the `finsight` and `finsight_test`
-databases and a MySQL user restricted to them, then writes the connection URLs
-into `.env`. The password is never stored in a tracked file.
+Asks for a new password, creates the `finsight` and `finsight_test` databases
+and a MySQL user restricted to them, then writes the connection URLs into
+`.env`. The password is never written to a tracked file — which is why this is a
+script that asks rather than a `.sql` file with a password typed into it.
 
-**4. Apply database migrations**
+**4. Apply the migrations**
 
 ```bash
 cd backend && ../.venv/bin/python -m alembic upgrade head
 ```
 
-Schema details and migration commands are in [`docs/DATABASE.md`](docs/DATABASE.md).
+Schema details are in [`docs/DATABASE.md`](docs/DATABASE.md).
 
 **5. Run**
 
 ```bash
-./scripts/dev.sh              # Linux/macOS — starts backend and client
+./scripts/dev.sh              # Linux/macOS — backend and client together
 .\scripts\dev.ps1             # Windows PowerShell
 ```
 
-Or run either half on its own with `./scripts/dev.sh backend` / `client`.
+Either half alone: `./scripts/dev.sh backend` or `./scripts/dev.sh client`.
 
 - API: <http://127.0.0.1:8000>
 - Interactive API documentation: <http://127.0.0.1:8000/docs>
 
-## Project layout
+---
 
+## Trying it with real data
+
+An empty account demonstrates nothing. With the backend running:
+
+```bash
+.venv/bin/python scripts/seed_demo.py
 ```
-backend/
-  app/
-    api/v1/        route handlers — parse, delegate, return
-    core/          configuration, logging, security
-    db/            engine and session management
-    models/        SQLAlchemy ORM models
-    schemas/       Pydantic request/response models
-    services/      business logic
-    repositories/  database queries
-    main.py        application factory
-  tests/           unit/ and api/
-frontend/
-  client/
-    api/           the only place the client makes HTTP calls
-    core/          client configuration and session state
-    models/        Qt item models — the adapter between data and a view
-    views/         one view per section
-    widgets/       reusable interface components
-    resources/     stylesheet
-    main.py        entry point
-  tests/
-docs/              architecture and decision records
-scripts/           database setup and development launchers
+
+This creates `demo@finsight.app` (password `demo-account-password`) and fills it
+with a year of history through the API — the same calls the interface makes, so
+nothing in it could have bypassed a rule.
+
+The history is deliberately shaped: three genuine subscriptions, one of them
+with a price rise partway through; a gym paid at irregular intervals, which
+detection must *not* propose; and a charge whose description carries no merchant
+at all, which is a limitation the application states rather than hides. A unit
+test runs the real detector over it and asserts exactly that.
+
+Then open **Subscriptions → Find subscriptions**: two of the three are untracked
+and waiting to be found.
+
+To retake the screenshots in `docs/screenshots/`:
+
+```bash
+.venv/bin/python scripts/screenshots.py
 ```
+
+They are captured offscreen from the real client against the real backend, so a
+screenshot cannot show a screen the application does not produce.
+
+---
 
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest              # everything
+.venv/bin/python -m pytest              # everything — 1125 tests
 .venv/bin/python -m pytest backend      # backend only
-.venv/bin/python -m pytest -m gui       # desktop client tests only
+.venv/bin/python -m pytest -m gui       # desktop client only
 ```
 
-GUI tests use pytest-qt. On a machine with no display they automatically fall
-back to Qt's offscreen renderer.
+Tests are written within each phase; there is no separate testing phase and no
+phase ends without a green run. GUI tests use pytest-qt and fall back to Qt's
+offscreen renderer where there is no display.
+
+The suite includes things a functional test cannot see: statement counts, so an
+N+1 query cannot pass unnoticed; pixel samples, so a button painted in nothing
+is caught; and a test asserting that autogenerate finds no difference between
+the models and the migrated schema, so a model changed without a migration
+fails immediately.
 
 Linting and formatting use ruff:
 
@@ -167,6 +241,41 @@ Linting and formatting use ruff:
 .venv/bin/ruff format .
 ```
 
-## License
+If the database-backed tests fail at collection rather than failing honestly,
+MySQL is not running or `finsight_test` does not exist — `./scripts/setup_database.sh`
+is the fix.
+
+---
+
+## Project layout
+
+```
+backend/
+  app/
+    api/v1/        route handlers — parse, delegate, return
+    core/          configuration, logging, security, money, rate limiting
+    db/            engine and session management
+    models/        SQLAlchemy ORM models
+    schemas/       Pydantic request/response models
+    services/      business logic, including the pure calculation modules
+    repositories/  database queries
+    main.py        application factory
+  tools/           demo-data generator (not part of the application)
+  tests/           unit/, api/ and db/
+frontend/
+  client/
+    api/           the only place the client makes HTTP calls
+    core/          client configuration and session state
+    models/        Qt item models — the adapter between data and a view
+    views/         one view per section
+    widgets/       reusable interface components
+    resources/     stylesheet and assets
+    main.py        entry point
+  tests/
+docs/              decisions, schema, progress, demo script, screenshots
+scripts/           database setup, launchers, demo seeding, screenshots
+```
+
+## Licence
 
 To be decided.

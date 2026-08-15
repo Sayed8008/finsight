@@ -77,7 +77,10 @@ class AnalyticsView(QWidget):
         scroll.setObjectName("DashboardScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # As needed, not never. A page wider than its viewport with the bar
+        # switched off is content nobody can reach — the panel is simply cut
+        # off at the edge with nothing to say so.
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         outer.addWidget(scroll)
 
         page = QWidget()

@@ -990,3 +990,57 @@ the three requests bounded by file size or by history rather than by page size,
 and therefore the only three that can take long enough to look like a hang. The
 paged list and the dashboard are single-digit milliseconds against localhost and
 are left alone; a busy cursor that flickers for two frames is worse than none.
+
+---
+
+## ADR-039 — The demonstration data is generated, deterministic, and tested
+**Date:** 2026-08-15 · **Status:** Accepted
+
+`backend/tools/demo_data.py` builds a year of history as a pure function of a
+date and a seed. `scripts/seed_demo.py` writes it **through the API**.
+`scripts/screenshots.py` captures every section offscreen from the real client
+against the real backend.
+
+**Why generated rather than hand-typed.** A hand-written fixture large enough to
+give the charts shape is hundreds of rows nobody will maintain, and it goes stale
+the moment "this month" moves. Generating from `today` means the demo is always
+current and the trend chart always has twelve months in it.
+
+**Why deterministic.** One seed, one history. A demo that produces different
+figures each run cannot be rehearsed, and screenshots taken from it disagree with
+each other and with whatever is on screen on the day.
+
+**Why it is not simply random.** The features worth demonstrating need structure
+that random data does not have: three genuine subscriptions, one with a price
+rise inside the detector's tolerance; a gym paid at irregular intervals that
+detection must correctly *not* propose; and a charge whose description carries no
+merchant, which is the limitation ADR-007 records and the honest thing to show. A
+demo where everything is detected demonstrates a low threshold, not a detector.
+
+**Why it is tested.** There is a unit test that runs the real detector over the
+generated history and asserts it finds exactly those three and not the gym.
+Without it, "a year of plausible history" is a claim about a file nobody checked
+— and it earned its place immediately: the first draft raised Spotify from 199 to
+249, which is 25% and outside the 15% amount tolerance, so the detector correctly
+split it in two. The test caught it and the fix was to the demo rather than to
+the tolerance.
+
+**Why the budgets are sized from the data rather than written as constants.**
+Fixed amounts only land in interesting states on the day they were chosen for: a
+12,000 food budget is 24% used on the 15th and 55% used on the 30th. Sized
+against month-to-date spending, the screen shows one comfortable, one close to
+its limit and one over, whatever day it is seeded — and there is a test asserting
+all three states appear.
+
+**Why seeding goes through the API and not the database.** Writing rows directly
+would be faster and would skip every rule the application enforces — the
+type/category agreement, the budget overlap check, the derived billing dates.
+Through the API, the demo account is one an ordinary user could have produced,
+and demo data that breaks a rule fails when it is seeded rather than on the day.
+
+**Why the screenshots are captured rather than composed.** They are taken from
+the real views, signed in through the real API client, so a screenshot cannot
+show a screen the application does not produce. This is the practice from
+ADR-012 pointed at documentation — and it behaved exactly as it has all along:
+taking them revealed that at a 1280px window the dashboard's right-hand column
+was clipped and, with horizontal scrolling switched off, unreachable.

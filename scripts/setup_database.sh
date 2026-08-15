@@ -26,6 +26,23 @@ if ! command -v mysql >/dev/null 2>&1; then
     exit 1
 fi
 
+# Checked here rather than being discovered halfway through: this script writes
+# .env with a short Python program at the end, and finding out about a missing
+# virtual environment *after* creating a database user is a worse order to do
+# things in.
+if [[ ! -x "$PROJECT_ROOT/.venv/bin/python" ]]; then
+    echo "Error: no virtual environment at $PROJECT_ROOT/.venv" >&2
+    echo "Create it first:" >&2
+    echo "    python3 -m venv .venv" >&2
+    echo "    .venv/bin/pip install -r requirements.txt -r requirements-dev.txt" >&2
+    exit 1
+fi
+
+if [[ ! -f "$PROJECT_ROOT/.env.example" ]]; then
+    echo "Error: .env.example is missing; cannot build a .env from it." >&2
+    exit 1
+fi
+
 echo "FinSight database setup"
 echo "-----------------------"
 echo "This creates two databases ($DB_NAME, $DB_TEST_NAME) and a MySQL user"
@@ -139,4 +156,11 @@ PY
 
 echo
 echo "Done. .env now holds the connection details and is git-ignored."
-echo "Next: database models and the first migration (Phase 2)."
+echo
+echo "Next:"
+echo "  1. Put a real SECRET_KEY in .env:"
+echo "         python3 -c \"import secrets; print(secrets.token_urlsafe(48))\""
+echo "  2. Create the tables:"
+echo "         cd backend && ../.venv/bin/python -m alembic upgrade head"
+echo "  3. Start it:"
+echo "         ./scripts/dev.sh"
