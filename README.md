@@ -240,6 +240,11 @@ terminal — the API is bundled with the window and served from the same process
 cd dist && zip -r FinSight-linux.zip FinSight
 ```
 
+For **Windows**, run the *Windows build* workflow from the Actions tab and
+download the `FinSight-windows-x86_64` artifact — a Windows executable can only
+be produced on Windows, and the workflow does that on a runner so no Windows
+machine is needed.
+
 The recipient still needs **MySQL** and their own `.env`; see
 [`packaging/README.md`](packaging/README.md) for what to send and what never to
 send. Never include your own `.env` — it holds your `SECRET_KEY` and database

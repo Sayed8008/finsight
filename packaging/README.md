@@ -29,9 +29,41 @@ A folder rather than a single file on purpose. `--onefile` has to unpack
 several hundred megabytes to a temporary directory on *every* launch, which
 turns a double-click into a visible wait; the folder starts immediately.
 
-**Build on the system you are shipping to.** A Linux build does not run on
-Windows or macOS. There is no cross-compilation — building a Windows copy means
-running the same command on Windows.
+**Build on the system you are shipping to.** PyInstaller freezes the
+interpreter and libraries of the machine it runs on, so a Linux build does not
+run on Windows or macOS and cannot be converted into one.
+
+For Windows, that is what `.github/workflows/windows-build.yml` is for — see
+below — so no Windows development machine is needed.
+
+---
+
+## Windows
+
+Built on a GitHub Actions `windows-latest` runner:
+
+1. **Actions** tab → **Windows build** → **Run workflow** (or push a `v*` tag,
+   or `gh workflow run "Windows build"`).
+2. When it finishes, open the run and download the **`FinSight-windows-x86_64`**
+   artifact. It is kept for 30 days.
+
+The artifact is a ZIP containing `FinSight.exe`, its libraries and
+`SETUP.txt` — the Windows instructions from `packaging/SETUP-windows.txt`.
+
+Two things are platform-specific and nothing else is:
+
+* **The icon.** PyInstaller refuses an SVG on Windows; the executable needs a
+  `.ico`. `make_icon.py` renders one from the same SVG the application uses, so
+  the two cannot drift. The workflow regenerates it on every build.
+* **The setup guide.** Windows needs different words, not translated ones:
+  MySQL is an installer with a service and an authentication mode to choose,
+  Notepad will save `.env` as `.env.txt` unless told otherwise, and SmartScreen
+  interrupts an unsigned executable in a way that looks like a virus warning.
+
+**SmartScreen.** The executable is not code-signed, so the first launch shows
+"Windows protected your PC". Users click *More info* → *Run anyway*. Signing
+requires a paid certificate; the setup guide explains the warning rather than
+leaving somebody to assume the file is malicious.
 
 ---
 
