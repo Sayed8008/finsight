@@ -15,7 +15,16 @@ from typing import Any
 import pytest
 
 from client.api.client import ApiError
-from client.api.dto import CategoryChange, Change, Comparison, MonthTotals, Trend
+from client.api.dto import (
+    CategoryChange,
+    Change,
+    Comparison,
+    MonthTotals,
+    SavingsJourney,
+    SavingsMonth,
+    SavingsSummary,
+    Trend,
+)
 from client.views.analytics_view import MAX_CATEGORY_ROWS, AnalyticsView
 from client.widgets.stat_tile import NEGATIVE, NEUTRAL, POSITIVE
 from client.widgets.trend_chart import CHART_PAGE, EMPTY_PAGE, TrendChart
@@ -74,10 +83,60 @@ def trend(months: tuple[MonthTotals, ...] = (), has_activity: bool = True) -> Tr
     return Trend(months=months, has_activity=has_activity)
 
 
+def savings_month(
+    year: int, number: int, income: str = "50000.00", expense: str = "36000.00"
+) -> SavingsMonth:
+    money_in, money_out = Decimal(income), Decimal(expense)
+    net = money_in - money_out
+    rate = (net / money_in * 100).quantize(Decimal("0.01")) if money_in else Decimal("0.00")
+    return SavingsMonth(
+        year=year,
+        month=number,
+        first_day=date(year, number, 1),
+        income=money_in,
+        expense=money_out,
+        net=net,
+        rate=rate,
+    )
+
+
+def journey(months: tuple[SavingsMonth, ...] = ()) -> SavingsJourney:
+    """A journey whose summary agrees with its months, as the server's does."""
+    if not months:
+        return SavingsJourney.empty()
+    latest = months[-1]
+    previous = months[-2] if len(months) > 1 else None
+    best = max(months, key=lambda m: m.net)
+    change = latest.net - (previous.net if previous else Decimal("0.00"))
+    return SavingsJourney(
+        months=months,
+        summary=SavingsSummary(
+            latest=latest,
+            previous=previous,
+            best=best,
+            change=change,
+            change_percentage=None,
+            is_personal_best=best is latest,
+        ),
+        badges=(),
+        observations=(),
+        has_history=True,
+    )
+
+
 class StubApi:
     def __init__(
-        self, trend_payload: Trend | None = None, comparison_payload: Comparison | None = None
+        self,
+        trend_payload: Trend | None = None,
+        comparison_payload: Comparison | None = None,
+        savings_payload: SavingsJourney | None = None,
     ) -> None:
+        self.savings_payload = (
+            savings_payload
+            if savings_payload is not None
+            else journey((savings_month(2026, 2), savings_month(2026, 3)))
+        )
+        self.savings_calls: list[dict[str, Any]] = []
         self.trend_payload = (
             trend_payload
             if trend_payload is not None
@@ -96,6 +155,10 @@ class StubApi:
     def comparison(self, **kwargs: Any) -> Comparison:
         self.comparison_calls.append(kwargs)
         return self.comparison_payload
+
+    def savings(self, **kwargs: Any) -> SavingsJourney:
+        self.savings_calls.append(kwargs)
+        return self.savings_payload
 
 
 class FailingApi(StubApi):

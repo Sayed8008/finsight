@@ -15,7 +15,15 @@ from decimal import Decimal
 import pytest
 
 from client.api.client import ApiError, ApiUnavailableError
-from client.api.dto import Comparison, Dashboard, Token, TransactionPage, Trend, User
+from client.api.dto import (
+    Comparison,
+    Dashboard,
+    SavingsJourney,
+    Token,
+    TransactionPage,
+    Trend,
+    User,
+)
 from client.views.auth_view import LOGIN_PAGE, REGISTER_PAGE
 from client.views.main_window import APP_PAGE, AUTH_PAGE, MainWindow
 from client.widgets.sidebar import NAV_ITEMS
@@ -68,6 +76,11 @@ class StubApi:
     def comparison(self, **kwargs) -> Comparison:
         self.calls.append("comparison")
         return Comparison.empty()
+
+    def savings(self, **kwargs) -> SavingsJourney:
+        """Analytics fetches this too; the shell tests only need a shape."""
+        self.calls.append("savings")
+        return SavingsJourney.empty()
 
     def categories(self, **kwargs) -> list:
         """Fetched by Settings, and by every screen offering a category picker."""

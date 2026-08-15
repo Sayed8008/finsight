@@ -25,6 +25,7 @@ from client.api.dto import (
     ImportPreview,
     ImportResult,
     Insights,
+    SavingsJourney,
     Subscription,
     SubscriptionSummary,
     Token,
@@ -485,6 +486,16 @@ class ApiClient:
         return Comparison.from_json(payload)
 
     # ─── Insights ─────────────────────────────────────────────────────────
+    def savings(self, *, months: int = 12) -> SavingsJourney:
+        """Completed monthly savings, with badges and observations.
+
+        `months=0` asks for the whole history. Nothing is cached client-side:
+        the server recomputes each month from the same aggregate the trend
+        chart uses, so an import or an edit is reflected on the next read.
+        """
+        payload = self._request("GET", f"{self._v1}/savings", params={"months": months})
+        return SavingsJourney.from_json(payload)
+
     def insights(
         self, *, period_start: str | None = None, period_end: str | None = None
     ) -> Insights:

@@ -996,3 +996,128 @@ class ImportResult:
             parts.append(f" Created: {', '.join(self.created_categories)}.")
 
         return "".join(parts)
+
+
+# ─── Savings journey ──────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SavingsMonth:
+    """One completed month's own performance.
+
+    `net` and `rate` are the server's figures, not recomputed here. There is
+    one place that turns a month into savings and it is not the client.
+    """
+
+    year: int
+    month: int
+    first_day: date_type
+    income: Decimal
+    expense: Decimal
+    #: Negative for a month that spent more than it earned. The sign is the
+    #: meaning, so it is never flipped for display.
+    net: Decimal
+    rate: Decimal
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> SavingsMonth:
+        return cls(
+            year=int(payload["year"]),
+            month=int(payload["month"]),
+            first_day=date_type.fromisoformat(payload["first_day"]),
+            income=Decimal(payload["income"]),
+            expense=Decimal(payload["expense"]),
+            net=Decimal(payload["net"]),
+            rate=Decimal(payload["rate"]),
+        )
+
+    @property
+    def is_positive(self) -> bool:
+        return self.net > Decimal("0")
+
+
+@dataclass(frozen=True)
+class SavingsBadge:
+    """One award, and the figure that earned it."""
+
+    code: str
+    title: str
+    detail: str
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> SavingsBadge:
+        return cls(
+            code=payload["code"], title=payload["title"], detail=payload["detail"]
+        )
+
+
+@dataclass(frozen=True)
+class SavingsSummary:
+    """The figures above the chart."""
+
+    latest: SavingsMonth | None
+    previous: SavingsMonth | None
+    best: SavingsMonth | None
+    change: Decimal
+    #: None when the previous month saved nothing or lost money — a percentage
+    #: against a non-positive base would be a fiction.
+    change_percentage: Decimal | None
+    is_personal_best: bool
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> SavingsSummary:
+        def month(key: str) -> SavingsMonth | None:
+            row = payload.get(key)
+            return SavingsMonth.from_json(row) if row else None
+
+        percentage = payload.get("change_percentage")
+        return cls(
+            latest=month("latest"),
+            previous=month("previous"),
+            best=month("best"),
+            change=Decimal(payload["change"]),
+            change_percentage=Decimal(percentage) if percentage is not None else None,
+            is_personal_best=bool(payload["is_personal_best"]),
+        )
+
+    @classmethod
+    def empty(cls) -> SavingsSummary:
+        return cls(
+            latest=None,
+            previous=None,
+            best=None,
+            change=Decimal("0.00"),
+            change_percentage=None,
+            is_personal_best=False,
+        )
+
+
+@dataclass(frozen=True)
+class SavingsJourney:
+    """Monthly savings history, with what it earned and what it shows."""
+
+    months: tuple[SavingsMonth, ...]
+    summary: SavingsSummary
+    badges: tuple[SavingsBadge, ...]
+    observations: tuple[str, ...]
+    has_history: bool
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> SavingsJourney:
+        return cls(
+            months=tuple(SavingsMonth.from_json(row) for row in payload["months"]),
+            summary=SavingsSummary.from_json(payload["summary"]),
+            badges=tuple(SavingsBadge.from_json(row) for row in payload["badges"]),
+            observations=tuple(payload["observations"]),
+            has_history=bool(payload["has_history"]),
+        )
+
+    @classmethod
+    def empty(cls) -> SavingsJourney:
+        return cls(
+            months=(),
+            summary=SavingsSummary.empty(),
+            badges=(),
+            observations=(),
+            has_history=False,
+        )

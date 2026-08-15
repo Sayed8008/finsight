@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QWidget
 
 from client.api.client import ApiClient
 from client.api.dto import User
+from client.core.animation import PAGE_MS, fade_in
 from client.views.analytics_view import AnalyticsView
 from client.views.budgets_view import BudgetsView
 from client.views.dashboard_view import DashboardView
@@ -147,6 +148,10 @@ class MainView(QWidget):
 
         self._activate(key)
         self.pages.setCurrentIndex(index)
+        # A short fade on arrival, so a section does not simply blink into
+        # place. After `setCurrentIndex`, so the widget being faded is the one
+        # now on screen — and non-blocking, so it is clickable throughout.
+        fade_in(self.pages.currentWidget(), PAGE_MS)
 
     def _activate(self, key: str) -> None:
         """Prepare a section to be looked at.

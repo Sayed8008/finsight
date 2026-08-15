@@ -21,7 +21,19 @@ def _select_qt_platform() -> None:
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 
+def _disable_animations() -> None:
+    """Turn transitions off for the whole suite.
+
+    Not inferred from the platform: these tests run against a real display on a
+    developer machine, where a fade would still be in flight when an assertion
+    read the widget. A screenshot taken at 40% opacity fails about one run in
+    twenty, which is the worst kind of test.
+    """
+    os.environ.setdefault("FINSIGHT_NO_ANIMATIONS", "1")
+
+
 _select_qt_platform()
+_disable_animations()
 
 import pytest  # noqa: E402  (must follow the platform selection above)
 

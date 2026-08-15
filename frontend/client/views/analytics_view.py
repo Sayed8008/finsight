@@ -26,9 +26,10 @@ from PySide6.QtWidgets import (
 )
 
 from client.api.client import ApiClient, ApiError
-from client.api.dto import CategoryChange, Change, Comparison, Trend
+from client.api.dto import CategoryChange, Change, Comparison, SavingsJourney, Trend
 from client.core.formatting import percentage_text
 from client.widgets.forms import LabelledWidget, MessageBanner
+from client.widgets.savings_journey import SavingsJourneyPanel
 from client.widgets.stat_tile import NEGATIVE, NEUTRAL, POSITIVE, StatTile
 from client.widgets.trend_chart import TrendChart
 
@@ -63,6 +64,7 @@ class AnalyticsView(QWidget):
 
         self._trend = Trend.empty()
         self._comparison = Comparison.empty()
+        self._savings = SavingsJourney.empty()
         self._currency = ""
         self._loaded = False
         #: Which requests are currently failing, by name. The screen makes two
@@ -99,6 +101,7 @@ class AnalyticsView(QWidget):
 
         layout.addWidget(self._build_trend_panel(), stretch=1)
         layout.addWidget(self._build_change_tiles())
+        layout.addWidget(self._build_savings_panel(), stretch=1)
         layout.addWidget(self._build_comparison_panel(), stretch=1)
         layout.addStretch(0)
 
@@ -162,6 +165,20 @@ class AnalyticsView(QWidget):
 
         return holder
 
+    def _build_savings_panel(self) -> QWidget:
+        """The savings journey, with its own range control.
+
+        A second control on one screen, deliberately: the span above drives
+        income-against-expense, and this drives the savings history, which is a
+        different number of months of a different thing. Sharing one control
+        would mean "Last 3 months" silently meant two spans at once. Both use
+        the same words in the same order so the pattern is learnt once.
+        """
+        self.savings_panel = SavingsJourneyPanel()
+        # Only the savings history depends on this, so only it is refetched.
+        self.savings_panel.range_box.currentIndexChanged.connect(self.reload_savings)
+        return self.savings_panel
+
     def _build_comparison_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("DashboardPanel")
@@ -198,6 +215,7 @@ class AnalyticsView(QWidget):
         # The chart labels its own tooltips, and the currency is per user, so
         # it cannot be known until somebody is signed in.
         self.trend_chart.set_currency(currency)
+        self.savings_panel.set_currency(currency)
         self._loaded = True
 
     def reload(self) -> None:
@@ -205,6 +223,7 @@ class AnalyticsView(QWidget):
         but a visit to this screen wants each of them current."""
         self.reload_trend()
         self.reload_comparison()
+        self.reload_savings()
 
     def reset(self) -> None:
         """Forget this session's data. See `DashboardView.reset`."""
@@ -215,6 +234,8 @@ class AnalyticsView(QWidget):
         self._failures.clear()
         self.banner.clear_message()
         self.trend_chart.set_months((), has_activity=False)
+        self._savings = SavingsJourney.empty()
+        self.savings_panel.reset()
         self._render_rows(())
 
     def reload_trend(self) -> None:
@@ -231,6 +252,20 @@ class AnalyticsView(QWidget):
 
         self._record_success("trend")
         self.trend_chart.set_months(self._trend.months, has_activity=self._trend.has_activity)
+
+    def reload_savings(self) -> None:
+        """Refetch only the savings history. Nothing else depends on its range."""
+        try:
+            self._savings = self._api.savings(months=self.savings_panel.selected_range)
+        except ApiError as exc:
+            self._record_failure("savings", exc)
+            # Not an empty journey: that says "no completed months yet", which
+            # is a claim about the account rather than about the connection.
+            self.savings_panel.show_failure(exc.message)
+            return
+
+        self._record_success("savings")
+        self.savings_panel.set_journey(self._savings)
 
     def reload_comparison(self) -> None:
         try:
