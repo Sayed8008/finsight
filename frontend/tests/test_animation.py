@@ -18,10 +18,10 @@ import pytest
 from PySide6.QtWidgets import QPushButton, QWidget
 
 from client.core.animation import (
-    CHIP_MS,
     DISABLE_ENV,
-    PAGE_MS,
-    PANEL_MS,
+    FAST_MS,
+    NORMAL_MS,
+    VIEW_MS,
     animations_enabled,
     fade_in,
 )
@@ -85,6 +85,71 @@ def test_a_faded_widget_stays_interactive(qtbot) -> None:
 
 
 def test_the_durations_are_short_enough_to_read_as_polish() -> None:
-    """Past about 200ms on a desktop application a transition reads as lag."""
-    for duration in (PAGE_MS, PANEL_MS, CHIP_MS):
-        assert 0 < duration <= 200
+    """Roughly 150-300ms: past that on a desktop application a transition
+    stops reading as polish and starts reading as lag."""
+    for duration in (FAST_MS, NORMAL_MS, VIEW_MS):
+        assert 150 <= duration <= 300
+
+
+# ─── The motion language is shared, not reinvented per screen ─────────────
+
+
+def test_one_easing_curve_is_used_everywhere() -> None:
+    """A consistent motion language means one curve, not one per widget."""
+    from PySide6.QtCore import QEasingCurve
+
+    from client.core.animation import EASING
+
+    assert EASING == QEasingCurve.Type.OutCubic
+
+
+def test_the_durations_are_ordered_by_how_much_moves() -> None:
+    """Fast feedback, normal transition, larger view change — in that order."""
+    assert FAST_MS < NORMAL_MS < VIEW_MS
+
+
+def test_charts_are_told_not_to_animate_under_test(qtbot) -> None:
+    """The accumulation bugs this application has shipped were both found by
+    counting series and axes across redraws. That only works if a redraw has
+    finished by the time it is counted."""
+    from PySide6.QtCharts import QChart
+
+    from client.core.animation import configure_chart
+
+    chart = QChart()
+    configure_chart(chart)
+
+    assert chart.animationOptions() == QChart.AnimationOption.NoAnimation
+
+
+def test_a_disabled_geometry_animation_still_moves_the_widget(qtbot) -> None:
+    """Disabling the animation must not disable the *result*: the sidebar
+    indicator has to end up on the selected item either way."""
+    from PySide6.QtCore import QRect
+
+    from client.core.animation import animate_geometry
+
+    widget = QWidget()
+    qtbot.addWidget(widget)
+    widget.show()
+    target = QRect(2, 120, 3, 20)
+
+    assert animate_geometry(widget, target) is None
+    assert widget.geometry() == target
+
+
+def test_staggering_an_empty_row_is_harmless() -> None:
+    from client.core.animation import stagger_in
+
+    stagger_in([])
+
+
+def test_a_skipped_slide_leaves_no_effect_attached(qtbot) -> None:
+    from client.core.animation import slide_fade_in
+
+    widget = QWidget()
+    qtbot.addWidget(widget)
+    widget.show()
+
+    assert slide_fade_in(widget) is None
+    assert widget.graphicsEffect() is None

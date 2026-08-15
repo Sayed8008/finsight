@@ -35,6 +35,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QPainter
 from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import CategoryShare
+from client.core.animation import configure_chart
 from client.core.formatting import percentage_text
 
 #: The single hue every bar is drawn in — the interface's primary blue.
@@ -67,7 +68,11 @@ class SpendingChart(QStackedWidget):
         self.chart.setBackgroundVisible(False)
         self.chart.setPlotAreaBackgroundVisible(False)
         self.chart.setMargins(QMargins(0, 0, 0, 0))
-        self.chart.setAnimationOptions(QChart.AnimationOption.NoAnimation)
+        # Bars grow to their values when the breakdown is drawn. QtCharts
+        # animates the series without touching the chart's series or axis
+        # lists, which is why it is used rather than anything hand-rolled:
+        # this chart has already shipped one accumulation bug.
+        configure_chart(self.chart)
 
         # The axes are created once and reused, not rebuilt per render. See
         # `_rebuild` for why that matters.

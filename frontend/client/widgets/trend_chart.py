@@ -23,6 +23,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QPainter
 from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import MonthTotals
+from client.core.animation import configure_chart
 
 #: A colour-vision-safe pair, verified rather than assumed. Deliberately not
 #: the green/red used for signed amounts — see the module docstring.
@@ -57,7 +58,9 @@ class TrendChart(QStackedWidget):
         self.chart.setBackgroundVisible(False)
         self.chart.setPlotAreaBackgroundVisible(False)
         self.chart.setMargins(QMargins(0, 0, 0, 0))
-        self.chart.setAnimationOptions(QChart.AnimationOption.NoAnimation)
+        # Grouped bars grow into place on first draw and on every span
+        # change. See `configure_chart` for why the animation is Qt's own.
+        configure_chart(self.chart)
 
         # Two series, so a legend is not optional: without it the colours mean
         # nothing, and colour would be the only thing telling them apart.

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiError
 from client.api.dto import ACTIVE, CANCELLED, CYCLE_LABELS, PAUSED, Category, Subscription
+from client.core.animation import NORMAL_MS, fade_in
 from client.widgets.forms import (
     FormField,
     LabelledWidget,
@@ -71,6 +72,8 @@ class SubscriptionDialog(QDialog):
         self.setWindowTitle("Edit subscription" if editing else "Track a subscription")
         self.setObjectName("SubscriptionDialog")
         self.setModal(True)
+        #: Set once so re-showing a dialog does not fade it again.
+        self._faded_in = False
         self.setMinimumWidth(460)
 
         layout = QVBoxLayout(self)
@@ -324,3 +327,16 @@ class SubscriptionDialog(QDialog):
     @property
     def subscription_id(self) -> int | None:
         return self._existing.id if self._existing is not None else None
+
+    def showEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Fade the dialog in the first time it is shown.
+
+        `showEvent` rather than `__init__`: a widget has no geometry until it
+        is shown, and the fade must run inside `exec`'s own event loop. Guarded
+        so a dialog raised again is not re-faded, which would read as a flicker
+        rather than as an opening.
+        """
+        super().showEvent(event)
+        if not self._faded_in:
+            self._faded_in = True
+            fade_in(self, NORMAL_MS)

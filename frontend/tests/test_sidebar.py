@@ -101,3 +101,45 @@ def test_sign_out_is_drawn_as_a_control(qtbot) -> None:
         app.setStyleSheet(previous)
 
     assert edge == QColor("#cdd2d9"), "the sign out control has no visible border"
+
+
+# ─── The active indicator ─────────────────────────────────────────────────
+
+
+def test_the_indicator_follows_the_selected_item(qtbot) -> None:
+    """It marks which section is open, so it has to be on that row — with
+    animations disabled it is placed directly, which is what a test can read."""
+    sidebar = Sidebar()
+    qtbot.addWidget(sidebar)
+    sidebar.show()
+    qtbot.waitExposed(sidebar)
+
+    sidebar.select(3)
+
+    row = sidebar._list.visualItemRect(sidebar._list.item(3))
+    assert sidebar._indicator.geometry().center().y() == row.center().y()
+
+
+def test_the_indicator_never_swallows_a_click(qtbot) -> None:
+    """An indicator that took mouse events would make the item under it
+    unselectable, which would be a navigation bug caused by decoration."""
+    from PySide6.QtCore import Qt
+
+    sidebar = Sidebar()
+    qtbot.addWidget(sidebar)
+
+    assert sidebar._indicator.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+
+def test_the_indicator_stays_within_its_row(qtbot) -> None:
+    """Inset vertically: a full-height bar reads as a border on the panel
+    rather than as a marker on an item."""
+    sidebar = Sidebar()
+    qtbot.addWidget(sidebar)
+    sidebar.show()
+    qtbot.waitExposed(sidebar)
+
+    sidebar.select(1)
+
+    row = sidebar._list.visualItemRect(sidebar._list.item(1))
+    assert sidebar._indicator.height() < row.height()

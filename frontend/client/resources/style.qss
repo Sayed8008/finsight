@@ -1191,3 +1191,56 @@ QScrollBar::sub-page:vertical {
 #BadgeRow {
     background-color: transparent;
 }
+
+/* ─── Sidebar active indicator ──────────────────────────────────────────── */
+
+/* A bar that travels between nav items. The selected item keeps its tinted
+   background from #NavList::item:selected — this adds the edge marker that
+   makes the movement visible, since Qt stylesheets cannot transition a
+   background colour. */
+#NavIndicator {
+    background-color: #1a56c4;
+    border-radius: 2px;
+}
+
+/* ─── Interaction feedback ──────────────────────────────────────────────── */
+
+/* Qt's stylesheet engine has no `transition` property, so a hover or press
+   state changes at once however it is written. Rather than drive a colour
+   animation per button — a graphics effect on every control, for a change too
+   fast to read as gradual anyway — every interactive control gets a complete
+   set of states here, and the animation budget is spent where movement is
+   actually visible: pages arriving, the sidebar indicator travelling, and
+   charts drawing themselves.
+
+   Each pressed colour is one step darker than its hover colour, so a press
+   reads as "further in" rather than as a different button. */
+
+#SecondaryButton:pressed {
+    background-color: #e6e9ee;
+    border-color: #b6bdc6;
+}
+
+#DangerButton:pressed {
+    background-color: #f9dedb;
+    border-color: #d98d86;
+}
+
+#LinkButton:pressed {
+    color: #0f2f6b;
+}
+
+/* Combo boxes and date fields already highlight their border on focus; a
+   pressed state on the drop-down completes the set. */
+#FieldSelect:pressed {
+    border-color: #1a56c4;
+}
+
+/* Cards the user can act on lift very slightly under the cursor. A border
+   change rather than a shadow: Qt stylesheets cannot animate a shadow, and a
+   static one under every card would flatten the page. */
+#BudgetCard:hover,
+#SubscriptionCard:hover,
+#CandidateCard:hover {
+    border-color: #b6bdc6;
+}

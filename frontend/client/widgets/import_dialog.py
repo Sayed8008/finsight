@@ -60,6 +60,7 @@ from client.api.dto import (
     ImportResult,
     PreviewRow,
 )
+from client.core.animation import NORMAL_MS, fade_in
 from client.widgets.busy import working
 from client.widgets.forms import LabelledWidget, MessageBanner
 
@@ -115,6 +116,8 @@ class ImportDialog(QDialog):
         self.setWindowTitle("Import transactions")
         self.setObjectName("ImportDialog")
         self.setModal(True)
+        #: Set once so re-showing a dialog does not fade it again.
+        self._faded_in = False
         self.setMinimumSize(760, 620)
 
         layout = QVBoxLayout(self)
@@ -603,3 +606,16 @@ class ImportDialog(QDialog):
 
     def _money(self, value: Decimal) -> str:
         return f"{value:,.2f} {self._currency}".strip()
+
+    def showEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Fade the dialog in the first time it is shown.
+
+        `showEvent` rather than `__init__`: a widget has no geometry until it
+        is shown, and the fade must run inside `exec`'s own event loop. Guarded
+        so a dialog raised again is not re-faded, which would read as a flicker
+        rather than as an opening.
+        """
+        super().showEvent(event)
+        if not self._faded_in:
+            self._faded_in = True
+            fade_in(self, NORMAL_MS)

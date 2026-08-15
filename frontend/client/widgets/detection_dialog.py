@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiError
 from client.api.dto import Candidate, Detection
+from client.core.animation import NORMAL_MS, fade_in
 from client.widgets.forms import MessageBanner
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,8 @@ class DetectionDialog(QDialog):
         self.setWindowTitle("Subscriptions found")
         self.setObjectName("DetectionDialog")
         self.setModal(True)
+        #: Set once so re-showing a dialog does not fade it again.
+        self._faded_in = False
         self.setMinimumSize(620, 480)
 
         layout = QVBoxLayout(self)
@@ -270,3 +273,16 @@ class DetectionDialog(QDialog):
     def tracked_anything(self) -> bool:
         """Whether anything was actually created, as opposed to dismissed."""
         return bool(self.tracked)
+
+    def showEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Fade the dialog in the first time it is shown.
+
+        `showEvent` rather than `__init__`: a widget has no geometry until it
+        is shown, and the fade must run inside `exec`'s own event loop. Guarded
+        so a dialog raised again is not re-faded, which would read as a flicker
+        rather than as an opening.
+        """
+        super().showEvent(event)
+        if not self._faded_in:
+            self._faded_in = True
+            fade_in(self, NORMAL_MS)

@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from client.api.dto import SavingsBadge, SavingsJourney, SavingsMonth
-from client.core.animation import CHIP_MS, PANEL_MS, fade_in
+from client.core.animation import FAST_MS, fade_in, stagger_in
 from client.core.formatting import percentage_text
 from client.widgets.forms import LabelledWidget
 from client.widgets.savings_chart import SavingsChart
@@ -148,16 +148,18 @@ class SavingsJourneyPanel(QFrame):
     def set_journey(self, journey: SavingsJourney) -> None:
         """Render a fetched journey.
 
-        The chart fades rather than the whole panel: the tiles beside it mostly
-        do not change when the range does, and fading them too would draw the
-        eye to figures that stayed the same.
+        The chart is not faded here: it animates its own line through QtCharts
+        (see `configure_chart`), and a fade over the top of that would be two
+        transitions across the same pixels, which reads as a stutter rather
+        than as one movement. The badges are the part that fades, because they
+        genuinely appear rather than change.
         """
         self.chart.set_months(journey.months)
         self._render_tiles(journey)
         self._render_badges(journey.badges)
         self._render_observations(journey.observations)
         self._render_subtitle(journey)
-        fade_in(self.chart, PANEL_MS)
+        stagger_in([self.saved_tile, self.change_tile, self.rate_tile, self.best_tile])
 
     def show_failure(self, message: str) -> None:
         """Say it could not be fetched, rather than that there is none."""
@@ -270,7 +272,7 @@ class SavingsJourneyPanel(QFrame):
             chip.setProperty("badge", badge.code)
             chip.setToolTip(badge.detail)
             self._badge_layout.addWidget(chip)
-            fade_in(chip, CHIP_MS)
+            fade_in(chip, FAST_MS)
 
         self._badge_layout.addStretch(1)
         self._badge_row.setVisible(bool(badges))

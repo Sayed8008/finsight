@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiError
 from client.api.dto import EXPENSE, Budget, Category
+from client.core.animation import NORMAL_MS, fade_in
 from client.widgets.forms import FormField, LabelledWidget, MessageBanner
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,8 @@ class BudgetDialog(QDialog):
         self.setWindowTitle("Edit budget" if editing else "Set a budget")
         self.setObjectName("BudgetDialog")
         self.setModal(True)
+        #: Set once so re-showing a dialog does not fade it again.
+        self._faded_in = False
         self.setMinimumWidth(420)
 
         layout = QVBoxLayout(self)
@@ -230,3 +233,16 @@ class BudgetDialog(QDialog):
     @property
     def budget_id(self) -> int | None:
         return self._existing.id if self._existing is not None else None
+
+    def showEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Fade the dialog in the first time it is shown.
+
+        `showEvent` rather than `__init__`: a widget has no geometry until it
+        is shown, and the fade must run inside `exec`'s own event loop. Guarded
+        so a dialog raised again is not re-faded, which would read as a flicker
+        rather than as an opening.
+        """
+        super().showEvent(event)
+        if not self._faded_in:
+            self._faded_in = True
+            fade_in(self, NORMAL_MS)

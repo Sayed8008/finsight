@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiClient, ApiError
 from client.api.dto import CategoryChange, Change, Comparison, SavingsJourney, Trend
+from client.core.animation import stagger_in
 from client.core.formatting import percentage_text
 from client.widgets.forms import LabelledWidget, MessageBanner
 from client.widgets.savings_journey import SavingsJourneyPanel
@@ -284,6 +285,7 @@ class AnalyticsView(QWidget):
         self._record_success("comparison")
         self.comparison_empty.setText(NOTHING_TO_COMPARE)
         self._render_comparison()
+        stagger_in([self.income_tile, self.expense_tile, self.net_tile])
 
     # ─── Rendering ────────────────────────────────────────────────────────
 

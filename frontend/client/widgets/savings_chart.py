@@ -34,6 +34,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QStackedWidget, QToolTip, QVBoxLayout, QWidget
 
 from client.api.dto import SavingsMonth
+from client.core.animation import configure_chart
 
 #: The line itself — the interface's primary blue, as used by every other
 #: single-series chart here.
@@ -77,10 +78,11 @@ class SavingsChart(QStackedWidget):
         self.chart.setBackgroundVisible(False)
         self.chart.setPlotAreaBackgroundVisible(False)
         self.chart.setMargins(QMargins(0, 0, 0, 0))
-        # No animation on the chart itself: Qt's series animations re-run on
-        # every redraw and make switching a filter feel like waiting. The panel
-        # fades instead, which is one short transition rather than twelve.
-        self.chart.setAnimationOptions(QChart.AnimationOption.NoAnimation)
+        # The line draws itself, and re-draws when the range changes. Kept
+        # to a single short animation on the series — the panel no longer
+        # fades the chart as well, because two transitions over the same
+        # pixels read as a stutter rather than as one movement.
+        configure_chart(self.chart)
 
         # Created once and reused. A *category* axis, so each tick can be
         # named with its month: a value axis formats labels from the number,

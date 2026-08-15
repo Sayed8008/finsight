@@ -10,6 +10,8 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
 
+from client.core.animation import FAST_MS, fade_in
+
 
 class FormField(QWidget):
     """A labelled text input."""
@@ -146,7 +148,13 @@ class MessageBanner(QLabel):
         # that needs an explicit refresh to take effect.
         self.style().unpolish(self)
         self.style().polish(self)
+        was_hidden = not self.isVisible()
         self.setVisible(bool(message))
+        # Faded only when it *appears*. A banner whose text changes while it is
+        # already on screen must not flash: the user is reading it, and a fade
+        # over a replacement sentence reads as a glitch rather than as news.
+        if message and was_hidden:
+            fade_in(self, FAST_MS)
 
     def clear_message(self) -> None:
         self.setText("")

@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiClient, ApiError
 from client.api.dto import Dashboard, Transaction
+from client.core.animation import stagger_in
 from client.widgets.forms import MessageBanner
 from client.widgets.spending_chart import SpendingChart
 from client.widgets.stat_tile import NEGATIVE, POSITIVE, HeroTile, StatTile
@@ -277,6 +278,10 @@ class DashboardView(QWidget):
         self.banner.clear_message()
         self._dashboard = dashboard
         self._render()
+        # The tiles arrive one after another, briefly. Only on a *fetch*, not
+        # on every repaint: this runs once per visit to the screen, which is
+        # what makes it read as the page assembling rather than as flicker.
+        stagger_in([self.net_tile, self.income_tile, self.expense_tile, self.commitment_tile])
 
     # ─── Rendering ────────────────────────────────────────────────────────
 

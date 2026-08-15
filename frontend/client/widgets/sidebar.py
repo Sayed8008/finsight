@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QLabel,
@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from client.core.animation import FAST_MS, animate_geometry
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,17 @@ class Sidebar(QFrame):
             self._list.addItem(entry)
         self._list.setCurrentRow(0)
         self._list.currentRowChanged.connect(self._on_row_changed)
+
+        # A bar that travels between items rather than a highlight that blinks
+        # from one to the next. Parented to the list's viewport so it scrolls
+        # and clips with the items, and given no mouse handling at all — an
+        # indicator that swallowed a click would make the item under it
+        # unselectable.
+        self._indicator = QFrame(self._list.viewport())
+        self._indicator.setObjectName("NavIndicator")
+        self._indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._indicator.setFixedWidth(3)
+        self._list.currentRowChanged.connect(self._move_indicator)
 
         # The nav list must show every item. Left to its own devices inside a
         # layout with a stretch below it, Qt gives the list a small height and
@@ -139,6 +152,37 @@ class Sidebar(QFrame):
     def _on_row_changed(self, row: int) -> None:
         if 0 <= row < len(NAV_ITEMS):
             self.navigated.emit(NAV_ITEMS[row].key)
+
+    def _move_indicator(self, row: int | None = None) -> None:
+        """Slide the indicator to the selected item.
+
+        Driven off the item's own rectangle rather than a computed row height,
+        so it stays aligned if the padding in the stylesheet changes.
+        """
+        current = self._list.currentRow() if row is None else row
+        item = self._list.item(current)
+        if item is None:
+            return
+        rect = self._list.visualItemRect(item)
+        if not rect.isValid():
+            return
+        # Inset vertically so the bar is shorter than the row — a full-height
+        # bar reads as a border on the panel rather than as a marker.
+        inset = 6
+        animate_geometry(
+            self._indicator,
+            QRect(2, rect.top() + inset, 3, max(rect.height() - inset * 2, 1)),
+            FAST_MS,
+        )
+
+    def showEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Place the indicator once the list has a real geometry.
+
+        `visualItemRect` returns an empty rectangle before the widget has been
+        laid out, so this cannot be done in `__init__`.
+        """
+        super().showEvent(event)
+        self._move_indicator()
 
     def set_backend_status(self, *, online: bool, detail: str = "") -> None:
         """Show whether the API is reachable.
