@@ -82,6 +82,13 @@ MoneyOut = Annotated[
     PlainSerializer(to_wire, return_type=str, when_used="json"),
 ]
 
+#: A percentage in a response. Given the same treatment as an amount, and for
+#: the same reason: it is a `Decimal`, and a JSON number would round it.
+PercentageOut = Annotated[
+    Decimal,
+    PlainSerializer(to_wire, return_type=str, when_used="json"),
+]
+
 #: An amount in a request body: strictly positive, at most two decimal places.
 PositiveMoney = Annotated[
     Decimal,

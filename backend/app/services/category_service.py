@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import Conflict, NotFound
+from app.core.exceptions import Conflict, NotFound, ValidationFailed
 from app.models.category import Category
 from app.models.enums import CategoryType
 from app.repositories.category_repository import CategoryRepository
@@ -30,6 +30,17 @@ class CategoryNotFound(NotFound):
 
 class DuplicateCategoryName(Conflict):
     message = "A category with that name already exists for this type."
+
+
+class CategoryIsInactive(ValidationFailed):
+    """Defined here rather than beside whichever feature first needed it.
+
+    Transactions and budgets both refuse to attach new records to a retired
+    category. One definition means one message, and the next feature that needs
+    the rule finds it where the other category rules live.
+    """
+
+    message = "That category has been deactivated. Restore it, or choose another."
 
 
 class CategoryService:
@@ -51,11 +62,23 @@ class CategoryService:
         )
 
     def get(self, user_id: int, category_id: int) -> Category:
-        """One of this user's categories, or `CategoryNotFound`."""
+        """One of this user's categories, or `CategoryNotFound`.
+
+        Also the guard other services use before attaching anything to a
+        category. Answering 404 for "belongs to someone else" as well as for
+        "does not exist" is what stops a transaction or budget endpoint being
+        used to discover which categories another account has.
+        """
         category = self._categories.get_for_user(category_id, user_id)
         if category is None:
             raise CategoryNotFound
         return category
+
+    @staticmethod
+    def require_active(category: Category) -> None:
+        """Refuse to attach anything new to a retired category."""
+        if not category.is_active:
+            raise CategoryIsInactive
 
     def create(
         self,

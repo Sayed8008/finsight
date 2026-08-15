@@ -31,7 +31,6 @@ from app.core.exceptions import NotFound, ValidationFailed
 from app.models.category import Category
 from app.models.enums import CategoryType, TransactionType
 from app.models.transaction import Transaction
-from app.repositories.category_repository import CategoryRepository
 from app.repositories.transaction_repository import (
     DEFAULT_PAGE_SIZE,
     SortDirection,
@@ -39,7 +38,7 @@ from app.repositories.transaction_repository import (
     TransactionFilters,
     TransactionRepository,
 )
-from app.services.category_service import CategoryNotFound
+from app.services.category_service import CategoryIsInactive, CategoryService
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +59,21 @@ class CategoryTypeMismatch(ValidationFailed):
     message = "An expense must use an expense category, and income an income category."
 
 
-class CategoryIsInactive(ValidationFailed):
-    message = "That category has been deactivated. Restore it, or choose another."
+#: `CategoryIsInactive` is re-exported so callers importing it from here still
+#: work, while the rule itself lives with the other category rules.
+__all__ = [
+    "CategoryIsInactive",
+    "CategoryTypeMismatch",
+    "TransactionNotFound",
+    "TransactionService",
+]
 
 
 class TransactionService:
     def __init__(self, session: Session) -> None:
         self._session = session
         self._transactions = TransactionRepository(session)
-        self._categories = CategoryRepository(session)
+        self._categories = CategoryService(session)
 
     # ─── Reading ──────────────────────────────────────────────────────────
 
@@ -179,19 +184,15 @@ class TransactionService:
     def _require_own_category(self, user_id: int, category_id: int) -> Category:
         """The category, if it is this user's — otherwise 404.
 
-        Not 403, and not a distinct "no such category" error: the same answer
-        for "does not exist" and "belongs to someone else" is what stops this
-        endpoint being used to enumerate another account's categories.
+        Delegates to `CategoryService`, which owns the rule and answers 404 for
+        "belongs to someone else" as well as "does not exist", so a transaction
+        cannot be used to enumerate another account's categories.
         """
-        category = self._categories.get_for_user(category_id, user_id)
-        if category is None:
-            raise CategoryNotFound
-        return category
+        return self._categories.get(user_id, category_id)
 
     @staticmethod
     def _require_active(category: Category) -> None:
-        if not category.is_active:
-            raise CategoryIsInactive
+        CategoryService.require_active(category)
 
     @staticmethod
     def _require_matching_types(transaction_type: TransactionType, category: Category) -> None:
