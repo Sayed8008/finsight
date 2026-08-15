@@ -2,9 +2,9 @@
 
 > Personal finance and subscription intelligence — a desktop application.
 
-**Status:** in development (Phase 9 — six working sections, including a
-deterministic insights engine whose every finding explains the figures it was
-built from)
+**Status:** in development (Phase 9.5 — six working sections, a deterministic
+insights engine, and automatic detection of recurring subscriptions from
+transaction history)
 
 FinSight helps a single user understand where their money goes: spending by
 category, budget health, savings trends, and — its distinguishing feature —

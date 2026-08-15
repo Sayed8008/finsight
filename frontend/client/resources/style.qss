@@ -824,11 +824,66 @@ QCheckBox::indicator:disabled {
 #InsightBadge[severity="info"]     { background-color: #eaf1fd; color: #1a56c4; }
 #InsightBadge[severity="good"]     { background-color: #e6f4ec; color: #1a7f4b; }
 
+/* ─── Detection candidates ──────────────────────────────────────────────── */
+
+#CandidateCard {
+    background-color: #ffffff;
+    border: 1px solid #e3e6ea;
+    border-left: 3px solid #cdd2d9;
+    border-radius: 8px;
+}
+
+/* Confidence on the edge, and in words on the badge — never colour alone. */
+#CandidateCard[confidence="high"]   { border-left-color: #1a7f4b; }
+#CandidateCard[confidence="medium"] { border-left-color: #d9782e; }
+#CandidateCard[confidence="low"]    { border-left-color: #cdd2d9; }
+
+#CandidateName {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+#CandidateCost {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1c2024;
+    background-color: transparent;
+}
+
+/* The evidence is the point of this screen, so it is not a footnote. */
+#CandidateEvidence {
+    font-size: 13px;
+    color: #4a5259;
+    background-color: transparent;
+}
+
+#CandidateSeen {
+    font-size: 11px;
+    color: #8b939c;
+    background-color: transparent;
+}
+
+#CandidateBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9px;
+    background-color: #eef0f3;
+    color: #6b7480;
+}
+
+#CandidateBadge[confidence="high"]   { background-color: #e6f4ec; color: #1a7f4b; }
+#CandidateBadge[confidence="medium"] { background-color: #fdf0e3; color: #b8620f; }
+#CandidateBadge[confidence="low"]    { background-color: #eef0f3; color: #6b7480; }
+
 /* ─── Dialogs ───────────────────────────────────────────────────────────── */
 
 #TransactionDialog,
 #BudgetDialog,
-#SubscriptionDialog {
+#SubscriptionDialog,
+#DetectionDialog {
     background-color: #ffffff;
 }
 
@@ -836,7 +891,8 @@ QCheckBox::indicator:disabled {
  * inside and outranks `#PrimaryButton`, which paints it in nothing (ADR-022). */
 #TransactionDialog QLabel,
 #BudgetDialog QLabel,
-#SubscriptionDialog QLabel {
+#SubscriptionDialog QLabel,
+#DetectionDialog QLabel {
     background-color: transparent;
 }
 

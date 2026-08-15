@@ -21,6 +21,7 @@ from client.api.dto import (
     Category,
     Comparison,
     Dashboard,
+    Detection,
     Insights,
     Subscription,
     SubscriptionSummary,
@@ -343,6 +344,23 @@ class ApiClient:
 
     def delete_subscription(self, subscription_id: int) -> None:
         self._request("DELETE", f"{self._v1}/subscriptions/{subscription_id}")
+
+    def detect_subscriptions(
+        self, *, lookback_days: int = 365, include_tracked: bool = False
+    ) -> Detection:
+        """Ask the server to look for subscriptions in transaction history.
+
+        Returns proposals only. Nothing is created until the user confirms one
+        (ADR-007), which is why every candidate arrives with its evidence.
+        """
+        payload = self._request(
+            "POST",
+            f"{self._v1}/subscriptions/detect",
+            params=_without_none(
+                {"lookback_days": lookback_days, "include_tracked": include_tracked or None}
+            ),
+        )
+        return Detection.from_json(payload)
 
     # ─── Dashboard ────────────────────────────────────────────────────────
     def dashboard(

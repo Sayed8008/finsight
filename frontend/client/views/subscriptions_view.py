@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from client.api.client import ApiClient, ApiError
 from client.api.dto import ACTIVE, CANCELLED, PAUSED, Category, Subscription, SubscriptionSummary
+from client.widgets.detection_dialog import DetectionDialog
 from client.widgets.forms import LabelledWidget, MessageBanner
 from client.widgets.subscription_card import SubscriptionCard
 from client.widgets.subscription_dialog import SubscriptionDialog
@@ -96,6 +97,16 @@ class SubscriptionsView(QWidget):
         row.addWidget(self.count_label)
 
         row.addStretch(1)
+
+        self.detect_button = QPushButton("Find subscriptions")
+        self.detect_button.setObjectName("SecondaryButton")
+        self.detect_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.detect_button.setToolTip(
+            "Look for recurring charges in your transaction history. Nothing is "
+            "added without your say-so."
+        )
+        self.detect_button.clicked.connect(self.find_subscriptions)
+        row.addWidget(self.detect_button)
 
         self.add_button = QPushButton("Track a subscription")
         self.add_button.setObjectName("PrimaryButton")
@@ -335,6 +346,30 @@ class SubscriptionsView(QWidget):
             parent=self,
         )
         if dialog.exec():
+            self.reload()
+
+    def find_subscriptions(self) -> None:
+        """Search transaction history and review whatever it proposes.
+
+        The search happens here; the *creating* happens one candidate at a time
+        inside the dialog, and only when the user asks for it (ADR-007).
+        """
+        try:
+            detection = self._api.detect_subscriptions()
+        except ApiError as exc:
+            self._show_error(exc)
+            return
+
+        self.banner.clear_message()
+        dialog = DetectionDialog(
+            detection,
+            track=lambda candidate: self._api.create_subscription(**candidate.as_subscription()),
+            currency=self._currency,
+            parent=self,
+        )
+        dialog.exec()
+
+        if dialog.tracked_anything:
             self.reload()
 
     def edit_subscription(self, subscription_id: int) -> None:

@@ -13,17 +13,24 @@ declaration order, and the other way round "summary" would be handed to the
 from __future__ import annotations
 
 from datetime import date as date_type
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
 from app.api.v1.deps import CurrentUser, SessionDep
 from app.models.enums import SubscriptionStatus
+from app.schemas.detection import CandidateResponse, DetectionResponse
 from app.schemas.subscription import (
     SubscriptionCreate,
     SubscriptionResponse,
     SubscriptionSummary,
     SubscriptionUpdate,
+)
+from app.services.detection_service import (
+    DEFAULT_LOOKBACK_DAYS,
+    MAX_LOOKBACK_DAYS,
+    DetectionService,
 )
 from app.services.subscription_service import SubscriptionService
 
@@ -51,6 +58,66 @@ AsOf = Annotated[
         "`days_until_renewal` and `is_due_soon`.",
     ),
 ]
+
+
+Lookback = Annotated[
+    int,
+    Query(
+        ge=1,
+        le=MAX_LOOKBACK_DAYS,
+        description="How many days of history to search.",
+    ),
+]
+IncludeTracked = Annotated[
+    bool,
+    Query(description="Include candidates matching a subscription already tracked."),
+]
+
+
+# Declared before `/{subscription_id}` so "detect" is not handed to the int
+# path parameter, as with `/summary`.
+@router.post(
+    "/detect",
+    response_model=DetectionResponse,
+    summary="Find subscriptions hidden in transaction history",
+    responses={422: {"description": "The lookback window is out of range"}},
+)
+def detect_subscriptions(
+    current_user: CurrentUser,
+    session: SessionDep,
+    lookback_days: Lookback = DEFAULT_LOOKBACK_DAYS,
+    include_tracked: IncludeTracked = False,
+    as_of: AsOf = None,
+) -> DetectionResponse:
+    """Propose subscriptions found by looking for recurrence in past expenses.
+
+    **This creates nothing** (ADR-007). Every candidate comes back with the
+    charges it was built from and a sentence describing them, and the user
+    decides. Detection that silently added to someone's monthly commitment
+    would be worse than detection that missed things.
+
+    Candidates matching a subscription already tracked are dropped, unless
+    asked for.
+
+    A `POST` for a route that changes no state, following ADR-007. It reads as
+    "run this analysis" rather than "fetch this resource", and the parameters
+    describe a computation rather than identifying something. Worth noting as
+    the one place in this API where the verb is about the work rather than the
+    effect.
+    """
+    on_day = as_of or date_type.today()
+    candidates = DetectionService(session).detect(
+        current_user.id,
+        lookback_days=lookback_days,
+        include_tracked=include_tracked,
+        today=on_day,
+    )
+
+    return DetectionResponse(
+        searched_from=on_day - timedelta(days=lookback_days),
+        searched_to=on_day,
+        candidates=[CandidateResponse.model_validate(candidate) for candidate in candidates],
+    )
 
 
 @router.get(

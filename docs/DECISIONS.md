@@ -633,3 +633,54 @@ insights endpoint's, so the two cannot drift.
 twice — once for the findings and once for the period they describe — which
 doubled every query behind the screen. Caught by a query-counting test, not by
 reading the code.
+
+---
+
+## ADR-031 — Detection matches merchants conservatively, and says when it cannot
+**Date:** 2026-08-15 · **Status:** Accepted
+
+Descriptions are normalised by stripping punctuation, any token containing a
+digit, and a short list of payment-processor words. Two charges group together
+only when the result matches **exactly**.
+
+**Why exact rather than fuzzy:** the tempting next step is prefix or
+similarity matching, so "NETFLIX AMSTERDAM" joins "NETFLIX". It would also join
+"GOOGLE DRIVE" to "GOOGLE PLAY". A missed subscription costs the user nothing —
+they carry on as they were. A merged pair produces a confident, wrong proposal
+about their money. The asymmetry decides it.
+
+**The noise list is short on purpose.** Every word in it is one that can no
+longer distinguish two merchants, so a longer list buys recall at the cost of
+exactly the failure above.
+
+**When there is no merchant, it says so.** `POS PURCHASE 4021` normalises to
+nothing and is skipped, which ADR-007 already recorded as the honest limitation.
+Guessing from it would be inventing rather than detecting.
+
+**Rejected:** scoring candidates by string similarity. It would need a
+threshold nobody could justify, and the failure it introduces is silent.
+
+---
+
+## ADR-032 — Confidence is evidence, not a percentage
+**Date:** 2026-08-15 · **Status:** Accepted
+
+A candidate carries three levels — high, medium, low — and a sentence:
+"5 charges of 499.00, exactly 30 days apart."
+
+**Why not a number:** "87% confident" implies a precision the method does not
+have, invites sorting by a figure nobody can check, and cannot be verified
+against anything. The sentence can: the user reads it, glances at their
+transactions, and knows. The evidence *is* the confidence, and the level is
+derived from the measurements rather than the other way round.
+
+The level needs all three of enough charges, steady intervals and steady
+amounts to reach *high* — any one of them weak drops it.
+
+**Consequence:** the interface never displays a raw severity or a raw score. It
+shows the sentence and a word.
+
+**Related:** the same reasoning as ADR-029, where insights must name the
+figures they were built from. Both come from the same rule — a finance
+application that cannot say *why* it said something is worse than one that says
+nothing.

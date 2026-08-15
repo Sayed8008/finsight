@@ -663,3 +663,100 @@ class Comparison:
         today = date_type.today()
         nothing = Change(ZERO, ZERO, ZERO, None, False)
         return cls(today, today, today, today, nothing, nothing, nothing, ())
+
+
+#: Detection confidence, mirroring the server's enum.
+HIGH = "high"
+MEDIUM = "medium"
+LOW = "low"
+
+CONFIDENCE_LABELS = {HIGH: "Very likely", MEDIUM: "Likely", LOW: "Possible"}
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """A possible subscription found in transaction history.
+
+    A *proposal*. Nothing exists until the user confirms it (ADR-007), which is
+    why this carries its evidence: a guess about someone's money has to be
+    checkable before it is acted on.
+    """
+
+    name: str
+    amount: Decimal
+    billing_cycle: str
+    confidence: str
+    #: The sentence the user checks the guess against.
+    evidence: str
+    occurrences: int
+    first_seen: date_type
+    last_seen: date_type
+    median_interval_days: int
+    interval_spread_days: int
+    next_expected: date_type
+    transaction_ids: tuple[int, ...]
+    category_id: int | None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Candidate:
+        return cls(
+            name=payload["name"],
+            amount=Decimal(payload["amount"]),
+            billing_cycle=payload["billing_cycle"],
+            confidence=payload["confidence"],
+            evidence=payload["evidence"],
+            occurrences=int(payload["occurrences"]),
+            first_seen=date_type.fromisoformat(payload["first_seen"]),
+            last_seen=date_type.fromisoformat(payload["last_seen"]),
+            median_interval_days=int(payload["median_interval_days"]),
+            interval_spread_days=int(payload["interval_spread_days"]),
+            next_expected=date_type.fromisoformat(payload["next_expected"]),
+            transaction_ids=tuple(int(i) for i in payload["transaction_ids"]),
+            category_id=payload.get("category_id"),
+        )
+
+    @property
+    def confidence_label(self) -> str:
+        return CONFIDENCE_LABELS.get(self.confidence, self.confidence.title())
+
+    @property
+    def cycle_label(self) -> str:
+        return CYCLE_LABELS.get(self.billing_cycle, self.billing_cycle.title())
+
+    def as_subscription(self) -> dict[str, Any]:
+        """The body that would create this, if the user says yes.
+
+        The start date is the *first* charge seen, not the last: the server
+        derives the billing schedule from the anchor (ADR-025), and anchoring
+        on the earliest known charge keeps the day-of-month it has always used.
+        """
+        return {
+            "name": self.name,
+            "amount": f"{self.amount:.2f}",
+            "billing_cycle": self.billing_cycle,
+            "start_date": self.first_seen.isoformat(),
+            "category_id": self.category_id,
+            "notes": f"Detected from transaction history — {self.evidence}",
+        }
+
+
+@dataclass(frozen=True)
+class Detection:
+    """What detection found, and the window it searched."""
+
+    searched_from: date_type
+    searched_to: date_type
+    candidates: tuple[Candidate, ...]
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Detection:
+        return cls(
+            searched_from=date_type.fromisoformat(payload["searched_from"]),
+            searched_to=date_type.fromisoformat(payload["searched_to"]),
+            candidates=tuple(Candidate.from_json(row) for row in payload["candidates"]),
+        )
+
+    @classmethod
+    def empty(cls) -> Detection:
+        today = date_type.today()
+        return cls(today, today, ())

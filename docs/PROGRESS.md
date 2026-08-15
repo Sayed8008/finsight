@@ -3,7 +3,7 @@
 Where the project stands, and what comes next. Updated at the end of each
 phase.
 
-**Last updated:** 2026-08-15 · **Current state:** Phase 9 complete
+**Last updated:** 2026-08-15 · **Current state:** Phase 9.5 complete
 
 ---
 
@@ -20,7 +20,7 @@ Read these first, in order:
 Then verify the environment still works:
 
 ```bash
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 749 passed
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 851 passed
 .venv/bin/ruff check .                                  # expect clean
 ./scripts/dev.sh                                        # backend + client
 ```
@@ -41,8 +41,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest    # expect 749 passed
 | 7 | Dashboard: financial summary, QtCharts, recent activity | ✅ done |
 | 8 | Analytics: aggregation endpoints, period comparison, charts | ✅ done |
 | 9 | Insights: rule engine, severity, explanations | ✅ done |
-| 9.5 | **Subscription auto-detection** from transaction history | ⬜ next |
-| 10 | CSV import (preview then commit) and export | ⬜ |
+| 9.5 | **Subscription auto-detection** from transaction history | ✅ done |
+| 10 | CSV import (preview then commit) and export | ⬜ next |
 | 11 | Polish: error/empty/loading states, logging, theming | ⬜ |
 | 12 | Packaging, README, screenshots, demo script | ⬜ |
 
@@ -88,6 +88,7 @@ ends with a green run.
 | `GET /api/v1/analytics/trend` | income and expense per month, gaps filled |
 | `GET /api/v1/analytics/comparison` | a period against the one before it |
 | `GET /api/v1/insights` | what is worth knowing, each explaining itself |
+| `POST /api/v1/subscriptions/detect` | propose subscriptions found in history; creates nothing |
 
 There is no `DELETE /categories/{id}` — see ADR-020. The budget endpoints take
 an optional `as_of` date, which decides `is_current` and `days_remaining`; it
@@ -113,50 +114,50 @@ with sidebar navigation. Five real sections:
 - **Insights** — one card per finding, severity in colour and in words, each
   with the explanation the rule wrote and a link to the screen it concerns.
 
+The Subscriptions screen also has **Find subscriptions**, which searches
+transaction history for recurring charges and reviews the candidates one at a
+time. Nothing is created without being chosen (ADR-007).
+
 A sixth section, **Insights**, lists what the rules found. Only
 **Settings** is still a placeholder.
 
-**Tests** — 749 passing: security, money, budget-arithmetic and billing-cycle
+**Tests** — 851 passing: security, money, budget-arithmetic and billing-cycle
 unit tests; model/constraint and repository tests against real MySQL; API tests
 for every feature area; and GUI tests via pytest-qt, including pixel checks on
 things no geometry assertion can catch.
 
 ---
 
-## Next: Phase 9.5 — Subscription auto-detection
+## Next: Phase 10 — CSV import and export
 
-The feature ADR-007 promoted to its own phase, and the only part of the project
-that is a genuine algorithm rather than CRUD plus arithmetic. It finds
-subscriptions the user never told the application about, by looking for
-recurrence in transactions they already recorded.
+The last feature phase. Import is the one place a user can destroy their own
+data in a single click, so the whole design is about making that impossible.
 
-1. **Description normalisation** — strip reference numbers, dates and card
-   digits so "NETFLIX.COM 4021" and "NETFLIX COM" group together.
-2. **Amount clustering with tolerance** — a subscription that rises from 499 to
-   549 is the same subscription, and an exact-match grouping would miss it.
-3. **Interval regularity scoring** — three charges 30, 31 and 29 days apart is
-   monthly; 30, 5 and 62 is not. The score has to survive a missing month.
-4. **Confidence with evidence** — every candidate says which transactions it
-   was built from and why it scored what it did.
-5. **`POST /subscriptions/detect`** — returns candidates. It creates nothing.
+1. **Export** — the easy half. Filtered transactions to CSV, amounts as plain
+   decimal text.
+2. **Import: preview** — parse, validate every row, and show what *would*
+   happen. Nothing is written.
+3. **Import: commit** — apply a previewed batch, in one transaction.
 
 **Watch out for:**
 
-- **ADR-007 is explicit: detection never creates a subscription silently.** It
-  proposes; the user confirms. A wrong guess that quietly appears in someone's
-  commitment total is worse than no guess.
-- Confidence must be **explainable in the same way insights are** — "four
-  charges of 499.00, 30±1 days apart" and not "87%". The evidence *is* the
-  confidence. `insight_rules` is the shape to copy.
-- Skip candidates that match an existing subscription:
-  `SubscriptionRepository.name_exists` was written for exactly this.
-- The algorithm is pure and belongs in its own module, testable without a
-  database. Only the gathering touches the session.
-- ADR-007 records the honest limitation: detection is bounded by the quality of
-  the description column, and `POS PURCHASE 4021` is unmatchable. Say so in the
-  interface rather than returning nonsense.
+- **Preview then commit, never a single step.** A malformed file that half
+  imports is worse than one that does not import at all. The commit must be one
+  database transaction that rolls back whole.
+- Amounts arrive as text from a spreadsheet: `1,234.56`, `1 234,56`, `(50.00)`
+  for negatives, a currency symbol. Parse deliberately with `Decimal`, and
+  reject what cannot be read rather than guessing (ADR-003).
+- Dates are worse than amounts. `03/04/2026` is two different days depending on
+  where the file came from. Ask, or require ISO, but do not guess.
+- Every row needs a category, and the file will name ones that do not exist.
+  Decide up front: create them, map them, or refuse — and say which in the
+  preview.
+- A file with 5,000 rows must not become 5,000 inserts one at a time, nor
+  5,000 category lookups. Load the category map once.
+- Import is the natural feeder for detection (9.5): a year of imported history
+  is exactly what makes `POST /subscriptions/detect` worth running.
 
-**Deliberately deferred:** CSV import and export (10).
+**Deliberately deferred:** polish (11), packaging (12).
 
 ---
 
@@ -204,6 +205,17 @@ recurrence in transactions they already recorded.
 - The insights screen has no "dismiss". An insight goes away when the thing it
   describes changes, which is honest but means a known-and-accepted situation
   keeps being reported.
+- Detection matches merchant names exactly after normalising, so "NETFLIX
+  AMSTERDAM" and "NETFLIX" are two merchants. Deliberate (ADR-031): a missed
+  subscription costs nothing, a merged pair produces a confident wrong claim
+  about someone's money.
+- "Not a subscription" hides a candidate for that review only. A permanent
+  never-suggest list needs its own table and a way to undo it, so the button
+  does not pretend to more than it does.
+- Detection needs at least three charges, so a subscription started two months
+  ago cannot be found yet.
+- Descriptions carrying no merchant — `POS PURCHASE 4021` — are unmatchable.
+  Recorded in ADR-007 from the start and still true.
 - Renewals are recorded by hand ("Mark renewed"). Nothing advances a billing
   date automatically, because nothing runs when the app is closed. A scheduled
   job would be a service, not a desktop app.

@@ -16,7 +16,7 @@ import pytest
 from PySide6.QtCore import QDate
 
 from client.api.client import ApiError
-from client.api.dto import Category, Subscription, SubscriptionSummary
+from client.api.dto import Candidate, Category, Detection, Subscription, SubscriptionSummary
 from client.views.subscriptions_view import CARDS_PAGE, EMPTY_PAGE, SubscriptionsView
 from client.widgets.subscription_card import SubscriptionCard
 from client.widgets.subscription_dialog import SubscriptionDialog
@@ -95,6 +95,10 @@ class StubApi:
         self.updated: list[tuple[int, dict[str, Any]]] = []
         self.renewed: list[int] = []
         self.deleted: list[int] = []
+        self.detections = 0
+        self.detection_payload = Detection(
+            searched_from=date(2025, 6, 15), searched_to=date(2026, 6, 15), candidates=()
+        )
 
     def categories(self, **_: Any) -> list[Category]:
         return list(CATEGORIES)
@@ -123,6 +127,10 @@ class StubApi:
 
     def delete_subscription(self, subscription_id: int) -> None:
         self.deleted.append(subscription_id)
+
+    def detect_subscriptions(self, **kwargs: Any) -> Detection:
+        self.detections += 1
+        return self.detection_payload
 
     @property
     def last_call(self) -> dict[str, Any]:
@@ -594,3 +602,78 @@ def test_adding_reloads_the_list(view: SubscriptionsView, monkeypatch) -> None:
     view.add_subscription()
 
     assert len(api_of(view).calls) == 1
+
+
+# ─── Detection ────────────────────────────────────────────────────────────
+
+
+def found(name: str = "Netflix") -> Candidate:
+    return Candidate(
+        name=name,
+        amount=Decimal("499.00"),
+        billing_cycle="monthly",
+        confidence="high",
+        evidence="5 charges of 499.00, exactly 30 days apart.",
+        occurrences=5,
+        first_seen=date(2026, 1, 5),
+        last_seen=date(2026, 5, 5),
+        median_interval_days=30,
+        interval_spread_days=0,
+        next_expected=date(2026, 6, 4),
+        transaction_ids=(1, 2, 3, 4, 5),
+        category_id=None,
+    )
+
+
+def test_finding_subscriptions_searches_history(view: SubscriptionsView, monkeypatch) -> None:
+    from client.widgets.detection_dialog import DetectionDialog
+
+    monkeypatch.setattr(DetectionDialog, "exec", lambda self: 1)
+
+    view.find_subscriptions()
+
+    assert api_of(view).detections == 1
+
+
+def test_searching_alone_creates_nothing(view: SubscriptionsView, monkeypatch) -> None:
+    """ADR-007: detection proposes. Opening the review must not add anything."""
+    from client.widgets.detection_dialog import DetectionDialog
+
+    api_of(view).detection_payload = Detection(
+        searched_from=date(2025, 6, 15),
+        searched_to=date(2026, 6, 15),
+        candidates=(found(),),
+    )
+    monkeypatch.setattr(DetectionDialog, "exec", lambda self: 1)
+
+    view.find_subscriptions()
+
+    assert api_of(view).created == []
+
+
+def test_the_list_only_reloads_if_something_was_tracked(
+    view: SubscriptionsView, monkeypatch
+) -> None:
+    """Nothing changed, so refetching would be waste."""
+    from client.widgets.detection_dialog import DetectionDialog
+
+    monkeypatch.setattr(DetectionDialog, "exec", lambda self: 1)
+    api_of(view).reset()
+
+    view.find_subscriptions()
+
+    assert api_of(view).calls == []
+
+
+def test_a_failed_search_is_reported(qtbot) -> None:
+    class CannotDetect(StubApi):
+        def detect_subscriptions(self, **kwargs: Any) -> Detection:
+            raise ApiError("Cannot reach the FinSight backend. Is it running?")
+
+    widget = SubscriptionsView(CannotDetect())
+    qtbot.addWidget(widget)
+    widget.load_once("BDT")
+
+    widget.find_subscriptions()
+
+    assert "Cannot reach" in widget.banner.text()
