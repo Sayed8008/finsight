@@ -208,7 +208,22 @@ MySQL still has to be running; on Ubuntu it starts with the machine
 (`systemctl status mysql`). The entry points at this checkout, so if you move
 the project, re-run the script.
 
-To remove it:
+#### Using your own logo
+
+Drop a PNG at `frontend/client/resources/finsight.png` and re-run the install
+script. It is preferred over the bundled SVG in both places a logo appears —
+the launcher entry and the window's own icon — so there is one file to replace
+and nothing to keep in sync:
+
+```bash
+cp /path/to/your-logo.png frontend/client/resources/finsight.png
+./scripts/install-desktop-entry.sh
+```
+
+Square, and 256×256 or larger, since the desktop scales one image down to
+every size it needs. Delete the PNG to go back to the bundled icon.
+
+To remove the launcher entry:
 
 ```bash
 ./scripts/install-desktop-entry.sh --uninstall

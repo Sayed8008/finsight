@@ -18,7 +18,15 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ENTRY="$APPS_DIR/finsight.desktop"
 LAUNCHER="$PROJECT_ROOT/scripts/finsight.sh"
-ICON="$PROJECT_ROOT/frontend/client/resources/finsight.svg"
+# A PNG dropped in beside the SVG wins, matching what the application itself
+# uses for its window icon. Replacing the logo is then copying one file and
+# re-running this, rather than editing two places that can disagree.
+RESOURCES="$PROJECT_ROOT/frontend/client/resources"
+if [[ -f "$RESOURCES/finsight.png" ]]; then
+    ICON="$RESOURCES/finsight.png"
+else
+    ICON="$RESOURCES/finsight.svg"
+fi
 
 if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f "$ENTRY"
@@ -30,6 +38,7 @@ fi
 
 [[ -f "$LAUNCHER" ]] || { echo "Missing launcher: $LAUNCHER" >&2; exit 1; }
 [[ -f "$ICON" ]] || { echo "Missing icon: $ICON" >&2; exit 1; }
+echo "Using icon: $ICON"
 chmod +x "$LAUNCHER"
 mkdir -p "$APPS_DIR"
 

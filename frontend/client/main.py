@@ -13,6 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 # Allow running this file directly, not only as a module.
@@ -34,6 +35,27 @@ STYLESHEET_PATH = RESOURCES_DIR / "style.qss"
 #: here, where it is known, rather than being written in the sheet and working
 #: only when launched from the right folder.
 RESOURCES_TOKEN = "%RESOURCES%"
+
+#: The application logo, in the order it is looked for. A PNG dropped in beside
+#: the SVG wins, so replacing the logo is copying a file rather than editing
+#: code — and the fallback means a missing or deleted logo leaves a working
+#: application with Qt's default icon rather than no application at all.
+ICON_NAMES = ("finsight.png", "finsight.svg")
+
+
+def app_icon() -> QIcon:
+    """The window and taskbar icon, or an empty one if none is installed.
+
+    Without this the window carries Qt's generic icon, which is what the
+    taskbar, the alt-tab switcher and the "about" dialog all show — the
+    desktop entry's icon only covers the launcher.
+    """
+    for name in ICON_NAMES:
+        candidate = RESOURCES_DIR / name
+        if candidate.is_file():
+            return QIcon(str(candidate))
+    logger.warning("No application icon found in %s", RESOURCES_DIR)
+    return QIcon()
 
 
 def load_stylesheet() -> str:
@@ -71,6 +93,8 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("FinSight")
     app.setOrganizationName("FinSight")
+    # Set on the application, so every window and dialog inherits it.
+    app.setWindowIcon(app_icon())
     app.setStyleSheet(load_stylesheet())
 
     api_client = ApiClient(config)
