@@ -378,4 +378,5 @@ scripts/           database setup, launchers, demo seeding, screenshots
 
 ## Licence
 
-To be decided.
+FinSight is licensed under the MIT License.
+See the [LICENSE](LICENSE) file for details.
